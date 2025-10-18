@@ -163,9 +163,13 @@ def compute_mae_loss(out) -> torch.Tensor:
     return out.loss
 
 def compute_per_sample_loss(pixel_values_btcwh: torch.Tensor, mask: torch.Tensor, out_logits: torch.Tensor, cfg) -> torch.Tensor:
-    """Compute per-sample MSE over masked patches, mirroring VideoMAE target construction."""
+    """Compute per-sample MSE over masked patches, exactly mirroring VideoMAE target construction.
+
+    Returns: tensor of shape (B,) with mean loss per sample.
+    """
     with torch.no_grad():
         frames = pixel_values_btcwh
+        # Unnormalize to [0,1] for RGB if applicable (matches HF forward)
         if cfg.num_channels == 3:
             device = frames.device
             dtype = frames.dtype
@@ -176,11 +180,45 @@ def compute_per_sample_loss(pixel_values_btcwh: torch.Tensor, mask: torch.Tensor
         B, T, C, H, W = frames.shape
         ts = cfg.tubelet_size
         ps = cfg.patch_size if isinstance(cfg.patch_size, int) else cfg.patch_size[0]
-        frames = frames.view(B, T // ts, ts, C, H // ps, ps, W // ps, ps)
+
+        # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
+        frames = frames.view(
+            B,
+            T // ts,
+            ts,
+            C,
+            H // ps,
+            ps,
+            W // ps,
+            ps,
+        )
+        # step 2: move dimensions to concatenate:
+        # (B, T//ts, H//ps, W//ps, ts, ps, ps, C)
         frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-        videos_patch = frames.view(B, T // ts * H // ps * W // ps, ts * ps * ps * C)
+
+        if getattr(cfg, "norm_pix_loss", False):
+            # step 3a: normalize per patch over (ts*ps*ps)
+            frames_norm = (frames - frames.mean(dim=-2, keepdim=True)) / (
+                frames.var(dim=-2, unbiased=True, keepdim=True).sqrt() + 1e-6
+            )
+            # step 4a: reshape to (B, tokens, ts*ps*ps*C)
+            videos_patch = frames_norm.view(
+                B,
+                (T // ts) * (H // ps) * (W // ps),
+                ts * ps * ps * C,
+            )
+        else:
+            # step 3b: reshape without normalization
+            videos_patch = frames.view(
+                B,
+                (T // ts) * (H // ps) * (W // ps),
+                ts * ps * ps * C,
+            )
+
+        # labels for masked positions -> (B, N_masked, F)
         labels = videos_patch[mask].reshape(B, -1, videos_patch.shape[-1])
 
+    # MSE reduced over feature dim first, then tokens
     diff2 = (out_logits - labels) ** 2  # (B, N_masked, F)
     per_token = diff2.mean(dim=-1)      # (B, N_masked)
     per_sample = per_token.mean(dim=-1) # (B,)
