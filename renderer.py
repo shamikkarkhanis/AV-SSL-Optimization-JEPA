@@ -158,7 +158,6 @@ def _reconstruct_from_logits_denorm(
     # Clip to [0,1]
     return x.clamp(0.0, 1.0)
 
-
 @torch.no_grad()
 def render_batch(
     step: int,

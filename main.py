@@ -16,8 +16,6 @@ from PIL import Image
 from transformers import AutoImageProcessor, VideoMAEForPreTraining #* HuggingFace library 
 import renderer
 
-
-# TODO: optimize for mps (metal performance shaders) for macos !
 # load model 
 MODEL_NAME = "MCG-NJU/videomae-base" #* https://huggingface.co/MCG-NJU/videomae-base
 
@@ -33,18 +31,6 @@ model = VideoMAEForPreTraining.from_pretrained(MODEL_NAME).to(DEVICE)
 for p in model.videomae.parameters():
     p.requires_grad = False
 model.eval()  # keep in eval unless you're training decoder/head
-
-
-# simple toy model that performs a no-op forward
-class ToyModel(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, pixel_values, mask=None):
-        return pixel_values
-
-toy_model = ToyModel().to(DEVICE).eval()
-
 
 # perform masking
 def make_mask_bool(batch: int, T: int, H: int, W: int, patch_size: int, tublet_size: int, mask_ratio: float = 0.9, device: str = "cpu") -> torch.Tensor:
