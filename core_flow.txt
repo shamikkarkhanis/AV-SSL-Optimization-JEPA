@@ -1,0 +1,59 @@
+Core Flow
+
+  - Data windows → clips: Build fixed‑length sequences of frames per scene/camera.
+  - Preprocess → model: Normalize + batch clips, generate random token masks, run VideoMAE in eval.
+  - Reconstruct → score: Reconstruct masked tubelet patches, compute per‑sample MSE on masked patches as the anomaly score.
+  - Log → visualize: Save per‑clip scores to JSONL and side‑by‑side GT/predicted frame visualizations.
+
+  Entry Point
+
+  - main.py:1: Orchestrates the end‑to‑end pipeline using a pretrained VideoMAE.
+      - Model setup and device selection: loads MCG-NJU/videomae-base via HuggingFace, supports cuda/mps/cpu (main.py:16–27).
+      - Data collation: collate_processor normalizes a batch of 16‑frame clips to pixel_values tensor and preserves clip metadata (main.py:54–77).
+      - Mask generation: make_mask_bool creates a boolean mask over tubelet tokens to hide a ratio of patches for reconstruction (main.py:32–51).
+      - Forward pass: forward_masked_mae ensures correct layout, checks divisibility by patch/tubelet sizes, runs the model, and reconstructs a clip‑level prediction from masked tokens if
+  available (main.py:79–150).
+      - Loss/score:
+          - compute_mae_loss returns the model’s aggregated training loss (useful for sanity logs) (main.py:154–162).
+          - compute_per_sample_loss computes the per‑clip MSE over masked tokens (the core “out of the blue” score). It mirrors MAE’s target construction by patchifying tubelets and taking MSE
+  in the masked subset (main.py:164–207).
+      - Scoring/logging loop: iterates over batches, computes per‑sample scores, emits records to scores.jsonl, and renders images for inspection (main.py:215–312).
+      - Why it matters: The per‑sample masked‑patch MSE is the anomaly proxy. Clips with larger reconstruction error are likelier to be unusual relative to the model’s learned spatiotemporal
+  priors.
+
+  Dataset & Manifests
+
+  - build_clips_manifest.py:1: Creates a JSONL of fixed‑length, chronologically ordered clips from NuScenes camera frames.
+      - Groups frames into scenes, sorts by timestamps, emits sliding windows with stride and optional padding logic (build_clips_manifest.py:26–107).
+      - Output schema: {scene, camera, frames, timestamps}. This feeds the dataloader.
+      - Why it matters: Provides consistent 16‑frame units the MAE expects, ensuring temporal coherence for reconstruction loss.
+  - nuscenes_clips.py:1: Minimal dataset wrapper that loads per‑clip image paths from a JSONL.
+      - Returns {"frames": list[PIL.Image], "meta": {...}} with scene/camera and frame paths (nuscenes_clips.py:7–38).
+      - Why it matters: Keeps per‑clip metadata so scored results can be mapped back to specific scenes/cameras for triage.
+
+  Visualization
+
+  - renderer.py:1: Utilities to preview reconstruction quality and the applied mask.
+      - Denormalization helpers and patchify stats aligned with MAE targets (renderer.py:39–117).
+      - Reconstruction from logits, with optional per‑patch mean/std denormalization to match training targets (renderer.py:19–73, 119–162).
+      - render_batch saves GT, predicted, and optional mask overlay panels for a selected frame index (renderer.py:164–259).
+      - Why it matters: Visual diagnostics help confirm that high scores correspond to visibly poor reconstructions (“out of the blue” scenes).
+
+  Artifacts
+
+  - clips_manifest.jsonl: Example clip windows for inference.
+  - scene_manifest.jsonl: Scene‑level frame listing (supporting data).
+  - scores.jsonl: Appended per‑clip anomaly scores with metadata for later selection, calibration, or thresholding.
+  - renders/*.png: Saved GT/pred/mask visualizations per batch and sample.
+
+  Model/Scoring Details That Tie Back to “Out of the Blue”
+
+  - Masked reconstruction: By masking a subset of tubelet tokens, the model must “fill in” spatiotemporal content based on learned priors. When a clip is typical, reconstructions of masked
+  regions are accurate; when it’s unusual, the predicted masked patches deviate more.
+  - Score definition: compute_per_sample_loss yields a per‑clip mean MSE on only the masked tokens, matching MAE’s loss target construction. This isolates “how surprising” the content is to the
+  model in the occluded regions, which serves as your “out of the blue” metric.
+  - Tunables:
+      - MASK_RATIO in main.py controls how much of the clip the model must reconstruct. Higher ratios can amplify differences but may also saturate difficulty (main.py:221–227).
+      - Batch size and device affect throughput; the code supports CPU/GPU/MPS and chooses sensible dataloader workers for macOS (main.py:232–239).
+  - Next practical step: Use scores.jsonl to select top‑K highest‑scoring clips or apply a threshold learned from a baseline distribution. The code already logs scene/camera/first‑frame to
+  facilitate retrieval.

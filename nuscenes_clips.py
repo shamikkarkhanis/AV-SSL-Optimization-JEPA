@@ -28,7 +28,13 @@ class NuScenesClips():
             raise KeyError("Record missing 'frame_paths' or 'frames'")
         assert len(paths) == self.frames_per_clip, f"Need {self.frames_per_clip} frames, got {len(paths)}"
         frames = [Image.open(p).convert("RGB") for p in paths]
-        return frames  # list of 16 PIL images
+        # Return frames plus lightweight metadata so downstream can log which clip was used
+        meta = {
+            "scene": rec.get("scene"),
+            "camera": rec.get("camera"),
+            "frames": paths,
+        }
+        return {"frames": frames, "meta": meta}
 
 
 if __name__ == "__main__":
