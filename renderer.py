@@ -248,13 +248,14 @@ def render_batch(
 
                 # create overlay on GT
                 base = gt_img.convert("RGBA")
-                overlay = Image.new("RGBA", base.size, (255, 0, 0, 0))
                 # alpha proportional to mask
                 alpha = (mask_img.clamp(0, 1) * 160).byte().cpu().numpy()
                 red = Image.new("L", base.size, 255)
                 zero = Image.new("L", base.size, 0)
                 aimg = Image.fromarray(alpha, mode="L")
-                overlay = Image.merge("RGBA", (red, zero, zero, aimg))
+                overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))  # Fully transparent
+                red_mask_area = Image.new("RGBA", base.size, (255, 0, 0, 160))
+                overlay.paste(red_mask_area, mask=aimg)
                 mask_panel = Image.alpha_composite(base, overlay).convert("RGB")
 
             # Build side-by-side panel: GT | Pred | (GT+Mask)
