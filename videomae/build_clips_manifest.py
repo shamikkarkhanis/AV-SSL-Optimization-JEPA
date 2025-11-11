@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 from collections import defaultdict
-
 # Reuse filename parsing from existing manifest builder if available
 try:
     from build_manifest import parse_scene_and_ts  # type: ignore

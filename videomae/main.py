@@ -352,3 +352,79 @@ if __name__ == "__main__":
             # log and continue to next batch
             print(f"Step {step}: skipping batch due to error: {e}")
             continue
+
+    # Summary: Show clips with highest anomaly scores
+    print("\n" + "="*80)
+    print("ANOMALY SCORE SUMMARY - Top Clips")
+    print("="*80)
+    
+    if os.path.exists(SCORES_OUT):
+        scores_list = []
+        with open(SCORES_OUT, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    scores_list.append(rec)
+                except Exception:
+                    continue
+        
+        if scores_list:
+            # Deduplicate clips: create unique identifier from scene + camera + first_frame
+            # Keep the highest score if a clip appears multiple times (due to shuffling)
+            clip_dict = {}
+            for rec in scores_list:
+                scene = rec.get("scene", "?scene")
+                camera = rec.get("camera", "?cam")
+                first_frame = rec.get("first_frame", "?frame")
+                clip_id = f"{scene}/{camera}/{first_frame}"
+                score = rec.get("score", 0.0)
+                
+                # Keep highest score for each unique clip
+                if clip_id not in clip_dict or score > clip_dict[clip_id]["score"]:
+                    clip_dict[clip_id] = rec
+            
+            # Convert back to list and sort by score (descending - highest anomaly first)
+            unique_scores = list(clip_dict.values())
+            unique_scores.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+            
+            # Show top 10 by default
+            top_k = min(10, len(unique_scores))
+            print(f"\nTop {top_k} clips with highest anomaly scores (deduplicated):")
+            print(f"Note: Each clip is a unique 16-frame sequence identified by scene + camera + start timestamp.\n")
+            
+            for i, rec in enumerate(unique_scores[:top_k], 1):
+                scene = rec.get("scene", "?scene")
+                camera = rec.get("camera", "?cam")
+                first_frame = rec.get("first_frame", "?frame")
+                score = rec.get("score", 0.0)
+                step_num = rec.get("step", "?")
+                
+                # Extract just the timestamp from the frame filename for clearer display
+                # Format: scene__CAMERA__timestamp.jpg -> show timestamp
+                frame_timestamp = first_frame.split("__")[-1].replace(".jpg", "") if "__" in first_frame else first_frame
+                
+                print(f"{i:2d}. Score: {score:.6f} | Scene: {scene[:30]}... | Camera: {camera} | Start Frame TS: {frame_timestamp} | Batch: {step_num}")
+            
+            # Summary stats (using deduplicated scores)
+            all_scores = [r.get("score", 0.0) for r in unique_scores]
+            if all_scores:
+                scores_arr = np.array(all_scores)
+                print(f"\nSummary Statistics:")
+                print(f"  Total scores logged: {len(scores_list)}")
+                print(f"  Unique clips: {len(unique_scores)}")
+                print(f"  Mean score: {scores_arr.mean():.6f}")
+                print(f"  Std score: {scores_arr.std():.6f}")
+                print(f"  Min score: {scores_arr.min():.6f}")
+                print(f"  Max score: {scores_arr.max():.6f}")
+                print(f"  Median (p50): {np.median(scores_arr):.6f}")
+                print(f"  p95: {np.percentile(scores_arr, 95):.6f}")
+                print(f"  p99: {np.percentile(scores_arr, 99):.6f}")
+        else:
+            print(f"No scores found in {SCORES_OUT}")
+    else:
+        print(f"Score file {SCORES_OUT} not found.")
+    
+    print("\n" + "="*80)
