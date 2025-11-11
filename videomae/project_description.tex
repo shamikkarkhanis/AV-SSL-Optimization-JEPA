@@ -1,0 +1,65 @@
+% One-page project description for MS application
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+% Tighten spacing for one-page fit
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\titlespacing*{\section}{0pt}{6pt}{3pt}
+\titlespacing*{\subsection}{0pt}{4pt}{2pt}
+\setlist{nosep,leftmargin=*}
+
+\title{Efficient Clip Mining for Autonomous Driving via JEPA-Based Representation Learning}
+\author{Applicant Name}
+\date{\vspace{-1.0em}}
+
+\begin{document}
+\maketitle
+
+\textbf{Objective}\\
+Develop a self-supervised pipeline that ranks and selects the most informative driving video clips using a JEPA-style masked video autoencoder (VideoMAE). The goal is to reduce dataset redundancy and training cost while preserving or improving downstream policy performance.
+
+\section*{Motivation}
+Modern autonomous driving (AV) datasets contain millions of highly repetitive clips (e.g., normal weather, lane keeping). Uniform sampling wastes compute and slows iteration. Self-supervised predictive models can expose rare or complex scenarios through reconstruction difficulty. By mining such clips, we can train more efficiently, cover edge cases better, and accelerate research cycles.
+
+\section*{Approach}
+\textbf{Representation Learning (JEPA/VideoMAE).} We use a JEPA-style masked video autoencoder to encode context and predict masked spatiotemporal patches. The masked-patch reconstruction error serves as a proxy for clip difficulty/novelty.\\
+\textbf{Per-Clip Scoring.} For each clip, we compute masked-patch MSE over predicted tokens. Higher scores indicate unusual motion, occlusions, adverse weather, or atypical interactions.\\
+\textbf{Selection \\& Diversification.} We sort clips by score and optionally apply embedding-space diversification (e.g., kNN/cluster coverage) to avoid over-representing a single failure mode.\\
+\textbf{Evaluation.} We compare models trained on mined subsets vs. uniformly sampled data, measuring policy success (imitation/RL), generalization to domain shifts, and sample efficiency.
+
+\section*{Expected Contributions}
+\begin{itemize}
+  \item A scalable, label-free clip mining method for AV datasets.
+  \item Open, reproducible tooling for per-clip difficulty scoring and visualization.
+  \item Evidence that curated subsets achieve comparable or better downstream performance with fewer samples.
+\end{itemize}
+
+\section*{Preliminary Results}
+Early experiments with VideoMAE (MCG-NJU) produce meaningful score variation and visual reconstructions that highlight masked regions in complex scenes. Score distributions are stable across seeds and correlate with qualitative novelty in sample clips.
+
+\section*{Work Plan (abbrev.)}
+\begin{itemize}
+  \item Months 1--2: Data ingestion, baseline VideoMAE scoring, visualization, and metrics.
+  \item Months 3--4: Diversified selection in embedding space; ablations on score thresholds.
+  \item Months 5--6: Downstream evaluation on policy learning tasks; analysis and write-up.
+\end{itemize}
+
+\section*{Resources}
+Compute with CUDA/MPS; datasets with short driving clips; PyTorch + Hugging Face. Code is modular and runs on CPU for small tests; accelerators recommended for throughput.
+
+\section*{Broader Impact}
+Reducing redundant training data lowers energy and compute costs while encouraging robust coverage of rare, safety-critical events—supporting more sustainable and reliable AV development.
+
+\section*{References}
+\begin{itemize}
+  \item Tong et al., VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training.
+  \item JEPA: Joint Embedding Predictive Architectures for self-supervised learning.
+\end{itemize}
+
+\end{document}
+

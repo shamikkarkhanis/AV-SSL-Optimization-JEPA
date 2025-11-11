@@ -253,7 +253,7 @@ def compute_per_sample_loss(pixel_values_btcwh: torch.Tensor, mask: torch.Tensor
 if __name__ == "__main__":
     MANIFEST = "clips_manifest.jsonl"
     BATCH_SIZE = 2
-    MASK_RATIO = 0.1
+    MASK_RATIO = 0.9
     SCORES_OUT = os.environ.get("SCORES_OUT", "scores.jsonl")
     BASELINE_STATS = os.environ.get("BASELINE_STATS")  # optional path with per-camera mean/std JSON
 
