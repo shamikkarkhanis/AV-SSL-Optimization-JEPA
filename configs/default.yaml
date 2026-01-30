@@ -1,0 +1,55 @@
+# JEPA Production Configuration
+# Extracted from research notebooks (jepa/prediction.ipynb)
+
+seed: 42
+
+data:
+  # Paths
+  manifest_path: "data/manifests/clips_manifest.jsonl"
+  data_root: "data/raw/v1.0-mini"       # Root directory for relative paths in manifest
+  
+  # Parameters
+  tubelet_size: 2
+  image_size: 224
+  channels: 3
+  patch_size: 16
+  mask_ratio: 0.75
+  num_patches: 256
+  
+  # Loader
+  batch_size: 8
+  num_workers: 0
+  shuffle_train: true
+  train_split: 0.8
+
+model:
+  encoder_name: "facebook/vjepa2-vitl-fpc64-256"
+  embedding_dim: 1024
+  freeze_encoder: true
+  
+  predictor:
+    hidden_dim: 1024
+    dropout: 0.1
+    activation: "gelu"
+
+training:
+  epochs: 30
+  optimizer: "adamw"
+  lr: 1.0e-4
+  weight_decay: 0.01
+  loss: "l1"
+  normalize_embeddings: true
+  checkpoint_every: 5
+  checkpoint_dir: "experiments/checkpoints"
+  save_best: true
+  device: "auto"
+
+evaluation:
+  metric: "cosine_similarity"
+  target_similarity: 0.94
+  batch_size: 8
+
+inference:
+  batch_size: 1
+  device: "cpu"
+  output_format: "jsonl"

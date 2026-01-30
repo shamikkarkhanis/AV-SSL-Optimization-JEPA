@@ -1,0 +1,37 @@
+# Core Deep Learning
+torch
+torchvision
+transformers
+
+# Scientific Computing
+numpy
+scikit-learn
+matplotlib
+
+# Image Processing
+pillow
+
+# HuggingFace Ecosystem
+huggingface-hub
+tokenizers
+safetensors
+
+# Utilities
+tqdm
+requests
+PyYAML
+
+# File System
+fsspec
+filelock
+
+# Python Core
+setuptools
+packaging
+typing_extensions
+
+# Security
+certifi
+urllib3
+idna
+charset-normalizer
