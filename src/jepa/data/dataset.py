@@ -1,6 +1,7 @@
 """JEPA Dataset for JSONL Clip Manifests"""
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
@@ -12,30 +13,22 @@ from PIL import Image
 class JEPADataset(Dataset):
     """Dataset for loading video clips from JSONL manifests.
     
-    Compatible with nuScenes manifest format (videomae/clips_manifest.jsonl).
-    Each line in the manifest is a JSON object with frame paths.
-    
     Args:
         manifest_path: Path to JSONL manifest file
-        transform: Optional transform to apply to frames (e.g., MaskTubelet)
+        data_root: Optional root directory to prepend to relative paths
+        transform: Optional transform to apply to frames
         frames_per_clip: Number of frames per clip (default: 16)
-    
-    Returns:
-        Dictionary with keys:
-            - frames: List of PIL Images (if no transform)
-            - clean_frames: Tensor after transform (T, C, H, W)
-            - masked_frames: Tensor with masking applied
-            - mask: Boolean mask array
-            - meta: Metadata dict (scene, camera, frame_paths)
     """
     
     def __init__(
         self,
         manifest_path: Union[str, Path],
+        data_root: Optional[Union[str, Path]] = None,
         transform=None,
         frames_per_clip: int = 16,
     ):
         self.manifest_path = Path(manifest_path)
+        self.data_root = Path(data_root) if data_root else None
         self.transform = transform
         self.frames_per_clip = frames_per_clip
         
@@ -46,11 +39,24 @@ class JEPADataset(Dataset):
     def __len__(self) -> int:
         return len(self.lines)
     
+    def _resolve_path(self, path: str) -> str:
+        """Resolve file path, handling relative/absolute and data_root."""
+        # If absolute, use as is
+        if os.path.isabs(path):
+            return path
+            
+        # If relative and we have a root, prepend it
+        if self.data_root:
+            return str(self.data_root / path)
+            
+        # If relative and no root, assume relative to CWD (fallback)
+        return path
+    
     def __getitem__(self, idx: int) -> Dict:
         # Parse JSONL line
         record = json.loads(self.lines[idx])
         
-        # Extract frame paths (supports both "frames" and "frame_paths" keys)
+        # Extract frame paths
         frame_paths: List[str] = record.get("frame_paths") or record.get("frames")
         if frame_paths is None:
             raise KeyError(f"Record {idx} missing 'frame_paths' or 'frames' key")
@@ -62,20 +68,21 @@ class JEPADataset(Dataset):
                 f"in record {idx}"
             )
         
-        # Load images as PIL RGB
-        frames = [Image.open(p).convert("RGB") for p in frame_paths]
+        # Resolve paths and load images
+        resolved_paths = [self._resolve_path(p) for p in frame_paths]
+        frames = [Image.open(p).convert("RGB") for p in resolved_paths]
         
-        # Resize to 224x224 (expected by VJEPA encoder)
+        # Resize to 224x224
         frames = [img.resize((224, 224), Image.BICUBIC) for img in frames]
         
         # Metadata
         meta = {
             "scene": record.get("scene"),
             "camera": record.get("camera"),
-            "frame_paths": frame_paths,
+            "frame_paths": resolved_paths,
         }
         
-        # Apply transform if provided
+        # Apply transform
         if self.transform:
             result = self.transform(frames)
             result["meta"] = meta
@@ -85,28 +92,23 @@ class JEPADataset(Dataset):
 
 
 class TubeletDataset(Dataset):
-    """Dataset for tubelet-based training (groups frames into tubelets).
-    
-    Converts 16-frame clips into tubelets (groups of `tubelet_size` frames).
-    Used for JEPA training where encoder processes 2-frame tubelets.
-    
-    Args:
-        manifest_path: Path to JSONL manifest
-        tubelet_size: Number of frames per tubelet (default: 2)
-        transform: Transform to apply (e.g., MaskTubelet)
-    """
+    """Dataset for tubelet-based training."""
     
     def __init__(
         self,
         manifest_path: Union[str, Path],
+        data_root: Optional[Union[str, Path]] = None,
         tubelet_size: int = 2,
         transform=None,
     ):
-        self.base_dataset = JEPADataset(manifest_path, transform=None)
+        self.base_dataset = JEPADataset(
+            manifest_path, 
+            data_root=data_root, 
+            transform=None
+        )
         self.tubelet_size = tubelet_size
         self.transform = transform
         
-        # Calculate number of tubelets per clip
         frames_per_clip = self.base_dataset.frames_per_clip
         self.tubelets_per_clip = frames_per_clip // tubelet_size
     
@@ -114,20 +116,16 @@ class TubeletDataset(Dataset):
         return len(self.base_dataset) * self.tubelets_per_clip
     
     def __getitem__(self, idx: int) -> Dict:
-        # Map global index to (clip_idx, tubelet_idx)
         clip_idx = idx // self.tubelets_per_clip
         tubelet_idx = idx % self.tubelets_per_clip
         
-        # Get full clip
         clip_data = self.base_dataset[clip_idx]
         frames = clip_data["frames"]
         
-        # Extract tubelet frames
         start = tubelet_idx * self.tubelet_size
         end = start + self.tubelet_size
         tubelet_frames = frames[start:end]
         
-        # Apply transform
         if self.transform:
             result = self.transform(tubelet_frames)
             result["meta"] = clip_data["meta"]

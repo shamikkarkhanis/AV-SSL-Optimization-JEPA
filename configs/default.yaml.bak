@@ -6,7 +6,7 @@ seed: 42
 data:
   # Paths
   manifest_path: "data/manifests/clips_manifest.jsonl"
-  data_root: "data/raw/v1.0-mini"       # Root directory for relative paths in manifest
+  data_root: "v1.0-mini"       # Root directory for relative paths in manifest
   
   # Parameters
   tubelet_size: 2
