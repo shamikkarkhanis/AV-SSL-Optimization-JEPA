@@ -2,7 +2,7 @@
 
 Production-ready implementation of Joint Embedding Predictive Architecture (JEPA) for autonomous driving clip mining.
 
-## 🚀 Features
+## Features
 
 - **Frozen VJEPA Encoder**: Uses `facebook/vjepa2-vitl-fpc64-256` backbone
 - **Efficient Training**: Trains only a lightweight predictor head (2-layer MLP)
@@ -30,7 +30,7 @@ notebooks/
 └── train_jepa.ipynb    # Google Colab training notebook
 ```
 
-## 🛠️ Installation
+## Installation
 
 ```bash
 # Clone repository
@@ -44,7 +44,7 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-## 🏋️ Training (Google Colab)
+## Training (Google Colab)
 
 1. Upload `notebooks/train_jepa.ipynb` to Google Colab
 2. Mount Google Drive
@@ -58,14 +58,14 @@ pip install -e ".[dev]"
 - Mask Ratio: 0.75
 - Tubelet Size: 2 frames
 
-## 📊 Evaluation (Local CPU)
+## Evaluation (Local CPU)
 
 Run evaluation on a test manifest:
 
 ```bash
 python scripts/eval.py \
   --checkpoint experiments/checkpoints/best_model.pt \
-  --manifest videomae/clips_manifest.jsonl \
+  --manifest data/manifests/clips_manifest.jsonl \
   --output eval_results.json
 ```
 
@@ -85,13 +85,9 @@ Output `scores.jsonl` contains novelty scores (higher = more novel):
 {"score": 0.45, "scene": "scene-001", "camera": "CAM_FRONT", "tubelet_idx": 0}
 ```
 
-## 🧪 Testing
+## Testing
 
 Run smoke tests:
 ```bash
 pytest tests/
 ```
-
-## 📜 License
-
-MIT

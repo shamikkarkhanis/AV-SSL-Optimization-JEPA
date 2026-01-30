@@ -1,4 +1,4 @@
-data/
+data/raw/
 .DS_Store
 __pycache__
 renders
