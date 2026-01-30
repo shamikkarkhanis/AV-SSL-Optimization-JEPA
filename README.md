@@ -10,7 +10,7 @@ Production-ready implementation of Joint Embedding Predictive Architecture (JEPA
 - **Novelty Scoring**: Scores clips based on reconstruction difficulty (1 - cosine similarity)
 - **Colab Ready**: Includes notebook for GPU training on Google Colab
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 src/jepa/               # Core package
