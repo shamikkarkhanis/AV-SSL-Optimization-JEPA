@@ -1,0 +1,63 @@
+# JEPA Production Configuration
+# Extracted from research notebooks (jepa/prediction.ipynb)
+
+# Random seed for reproducibility
+seed: 42
+
+# Data configuration
+data:
+  tubelet_size: 2              # Temporal dimension (frames per tubelet)
+  image_size: 224              # Resized image resolution
+  channels: 3                  # RGB
+  patch_size: 16               # Spatial patch size (16x16)
+  mask_ratio: 0.75             # 75% masking
+  num_patches: 256             # Total patches from encoder
+  
+  # DataLoader settings
+  batch_size: 8
+  num_workers: 0               # Set to 0 for MPS/macOS compatibility
+  shuffle_train: true
+  train_split: 0.8             # 80/20 train/val split
+
+# Model configuration
+model:
+  encoder_name: "facebook/vjepa2-vitl-fpc64-256"
+  embedding_dim: 1024          # Encoder output dimension
+  freeze_encoder: true         # Do not fine-tune encoder
+  
+  # Predictor head (2-layer MLP)
+  predictor:
+    hidden_dim: 1024
+    dropout: 0.1               # 10% dropout
+    activation: "gelu"         # GELU activation
+
+# Training configuration
+training:
+  epochs: 30
+  optimizer: "adamw"
+  lr: 1.0e-4                   # Learning rate
+  weight_decay: 0.01           # AdamW default
+  
+  # Loss function
+  loss: "l1"                   # L1 loss on L2-normalized embeddings
+  normalize_embeddings: true   # Critical: L2 normalize before loss
+  
+  # Checkpointing
+  checkpoint_every: 5          # Save every N epochs
+  checkpoint_dir: "experiments/checkpoints"
+  save_best: true              # Save best model by val loss
+  
+  # Device
+  device: "auto"               # auto-detect: cuda > mps > cpu
+
+# Evaluation configuration
+evaluation:
+  metric: "cosine_similarity"  # Primary metric
+  target_similarity: 0.94      # Research achieved 0.9472
+  batch_size: 8                # Can use same as training
+
+# Inference configuration
+inference:
+  batch_size: 1                # Single clip inference
+  device: "cpu"                # CPU-only for local inference
+  output_format: "jsonl"       # scores.jsonl output
