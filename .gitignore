@@ -3,6 +3,7 @@ data/raw/
 __pycache__
 renders
 v1.0-mini
+
 # Production build artifacts
 experiments/
 .pytest_cache/
@@ -11,3 +12,10 @@ dist/
 build/
 *.pyc
 .ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+
+# Eval output
+eval_results.json
