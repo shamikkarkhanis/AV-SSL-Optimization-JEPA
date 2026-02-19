@@ -20,6 +20,7 @@ safetensors
 tqdm
 requests
 PyYAML
+psutil
 
 # File System
 fsspec

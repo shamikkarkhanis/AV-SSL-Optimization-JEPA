@@ -5,13 +5,17 @@ import json
 import logging
 import sys
 import time
-import resource
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+try:
+    import psutil
+except ImportError:
+    psutil = None
+import resource
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent / "src"))
@@ -29,13 +33,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("inference")
 
 
-def _get_peak_rss_mb() -> float:
-    """Return process peak RSS in MB."""
+def _peak_ru_maxrss_mb() -> float:
+    """Return process ru_maxrss in MB (peak RSS from OS accounting)."""
     rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     # macOS reports bytes, Linux reports KB
     if sys.platform == "darwin":
         return rss_kb / (1024.0 * 1024.0)
     return rss_kb / 1024.0
+
+
+def _get_current_rss_mb(process: Optional["psutil.Process"]) -> float:
+    """Return current process RSS in MB, with ru_maxrss fallback."""
+    if process is not None:
+        return process.memory_info().rss / (1024.0 * 1024.0)
+    return _peak_ru_maxrss_mb()
 
 
 def _extract_meta_sample(metas: Dict[str, Any], idx: int) -> Dict[str, Any]:
@@ -109,15 +120,24 @@ def score_clips(
     if summary_output is None:
         summary_output = derive_summary_output_path(output_path)
 
+    process = psutil.Process() if psutil is not None else None
+    if process is None:
+        logger.warning(
+            "psutil is not installed; memory overhead falls back to ru_maxrss (coarse)."
+        )
+
     runtime_ms_values = []
     energy_joules_values = []
-    batch_mem_delta_values = []
-    baseline_peak_rss_mb = _get_peak_rss_mb()
-    prev_peak_rss_mb = baseline_peak_rss_mb
+    batch_mem_positive_delta_values = []
+    batch_mem_signed_delta_values = []
+    baseline_current_rss_mb = _get_current_rss_mb(process)
+    max_current_rss_mb = baseline_current_rss_mb
 
     with open(output_path, "w") as f:
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(loader)):
+                rss_before_batch_mb = _get_current_rss_mb(process)
+
                 masked = batch["masked_frames"].to(device_obj)
                 clean = batch["clean_frames"].to(device_obj)
                 mask_frac = batch["mask_frac"].to(device_obj)
@@ -136,15 +156,19 @@ def score_clips(
                     runtime_per_sample_ms, power_watts
                 )
 
-                current_peak_rss_mb = _get_peak_rss_mb()
-                batch_peak_delta_mb = max(0.0, current_peak_rss_mb - prev_peak_rss_mb)
-                prev_peak_rss_mb = current_peak_rss_mb
-                memory_overhead_per_sample_mb = batch_peak_delta_mb / max(batch_size_curr, 1)
+                rss_after_batch_mb = _get_current_rss_mb(process)
+                max_current_rss_mb = max(max_current_rss_mb, rss_after_batch_mb)
+                batch_signed_delta_mb = rss_after_batch_mb - rss_before_batch_mb
+                batch_positive_delta_mb = max(0.0, batch_signed_delta_mb)
+                memory_overhead_per_sample_mb = batch_positive_delta_mb / max(
+                    batch_size_curr, 1
+                )
 
                 if not no_cost_metrics and batch_idx >= warmup_batches:
                     runtime_ms_values.extend([runtime_per_sample_ms] * batch_size_curr)
                     energy_joules_values.extend([energy_per_sample_j] * batch_size_curr)
-                    batch_mem_delta_values.append(batch_peak_delta_mb)
+                    batch_mem_positive_delta_values.append(batch_positive_delta_mb)
+                    batch_mem_signed_delta_values.append(batch_signed_delta_mb)
 
                 metas = batch["meta"]
                 for i in range(batch_size_curr):
@@ -172,8 +196,7 @@ def score_clips(
         logger.info("Cost telemetry disabled; skipping summary output.")
         return
 
-    final_peak_rss_mb = _get_peak_rss_mb()
-    peak_rss_delta_mb = max(0.0, final_peak_rss_mb - baseline_peak_rss_mb)
+    peak_rss_delta_mb = max(0.0, max_current_rss_mb - baseline_current_rss_mb)
 
     summary = {
         "num_samples": len(dataset),
@@ -188,9 +211,15 @@ def score_clips(
         "memory_overhead_mb": {
             "peak_rss_delta": float(peak_rss_delta_mb),
             "mean_per_batch_delta": float(
-                sum(batch_mem_delta_values) / max(len(batch_mem_delta_values), 1)
+                sum(batch_mem_positive_delta_values)
+                / max(len(batch_mem_positive_delta_values), 1)
+            ),
+            "mean_per_batch_signed_delta": float(
+                sum(batch_mem_signed_delta_values)
+                / max(len(batch_mem_signed_delta_values), 1)
             ),
         },
+        "memory_metric_source": "psutil_rss" if process is not None else "ru_maxrss",
     }
 
     with open(summary_output, "w") as sf:
