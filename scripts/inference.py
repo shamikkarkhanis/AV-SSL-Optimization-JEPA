@@ -191,7 +191,7 @@ def score_clips(
                 amp_dtype = torch.bfloat16
             elif amp == "fp16":
                 amp_dtype = torch.float16
-        elif device_obj.type == "cpu" and amp in ("auto", "bf16"):
+        elif device_obj.type == "cpu" and amp == "bf16":
             amp_device_type = "cpu"
             amp_dtype = torch.bfloat16
 
@@ -227,8 +227,8 @@ def score_clips(
                     clean_emb, pred_emb = model(clean, masked, mask_frac)
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
 
-                clean_np = clean_emb.cpu().numpy()
-                pred_np = pred_emb.cpu().numpy()
+                clean_np = clean_emb.float().cpu().numpy()
+                pred_np = pred_emb.float().cpu().numpy()
                 scores = compute_novelty_score(pred_np, clean_np)
 
                 batch_size_curr = len(scores)
