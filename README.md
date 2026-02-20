@@ -77,12 +77,27 @@ Score clips to identify novel/hard scenarios:
 python scripts/inference.py \
   --checkpoint experiments/checkpoints/best_model.pt \
   --manifest new_clips.jsonl \
-  --output scores.jsonl
+  --output scores.jsonl \
+  --summary-output scores.summary.json \
+  --power-watts 75
 ```
 
-Output `scores.jsonl` contains novelty scores (higher = more novel):
+Output `scores.jsonl` contains novelty scores and per-clip cost telemetry:
 ```json
-{"score": 0.45, "scene": "scene-001", "camera": "CAM_FRONT", "tubelet_idx": 0}
+{"score": 0.45, "scene": "scene-001", "camera": "CAM_FRONT", "tubelet_idx": 0, "runtime_ms": 18.27, "energy_joules": 1.37, "memory_overhead_mb": 0.22}
+```
+
+Run-level cost summary is written to `scores.summary.json`:
+```json
+{
+  "num_samples": 128,
+  "batch_size": 1,
+  "device": "cpu",
+  "power_watts": 75.0,
+  "runtime_ms": {"mean": 17.9, "p50": 17.6, "p95": 20.1, "min": 15.4, "max": 23.5, "total": 2291.2},
+  "energy_joules": {"mean": 1.34, "p50": 1.32, "p95": 1.51, "min": 1.15, "max": 1.76, "total": 171.84},
+  "memory_overhead_mb": {"peak_rss_delta": 82.4, "mean_per_batch_delta": 0.58}
+}
 ```
 
 ## Testing
