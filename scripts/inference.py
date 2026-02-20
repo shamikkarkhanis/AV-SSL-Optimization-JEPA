@@ -3,8 +3,10 @@
 import argparse
 import json
 import logging
+import os
 import sys
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -31,6 +33,27 @@ from jepa.evaluation import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("inference")
+
+
+def _append_run_index(summary: Dict[str, Any], summary_output: str) -> None:
+    """Append lightweight run metadata for chronological experiment tracking."""
+    summary_path = Path(summary_output)
+    if "experiments/inference_runs" not in summary_path.as_posix():
+        return
+
+    index_path = Path("experiments") / "inference_runs" / "index.jsonl"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_entry = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "summary_json": str(summary_path),
+        "output_jsonl": summary.get("output_jsonl"),
+        "num_samples": summary.get("num_samples"),
+        "device": summary.get("device"),
+        "runtime_ms_mean": summary.get("runtime_ms", {}).get("mean"),
+        "energy_joules_total": summary.get("energy_joules", {}).get("total"),
+    }
+    with open(index_path, "a") as index_file:
+        index_file.write(json.dumps(index_entry) + "\n")
 
 
 def _peak_ru_maxrss_mb() -> float:
@@ -74,10 +97,41 @@ def score_clips(
     summary_output: Optional[str] = None,
     warmup_batches: int = 1,
     no_cost_metrics: bool = False,
+    num_workers: Optional[int] = None,
+    amp: str = "auto",
+    cpu_threads: Optional[int] = None,
 ):
     """Run inference scoring with optional cost telemetry."""
+    if device == "auto":
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+
     device_obj = torch.device(device)
     logger.info(f"Using device: {device_obj}")
+
+    if cpu_threads is not None and cpu_threads > 0:
+        torch.set_num_threads(cpu_threads)
+        logger.info(f"Using CPU threads: {cpu_threads}")
+
+    if num_workers is None:
+        cpu_count = os.cpu_count() or 1
+        num_workers = 0 if device_obj.type == "mps" else min(max(cpu_count - 1, 0), 8)
+
+    pin_memory = device_obj.type == "cuda"
+    non_blocking = device_obj.type == "cuda"
+    loader_kwargs: Dict[str, Any] = {
+        "batch_size": batch_size,
+        "shuffle": False,
+        "num_workers": num_workers,
+        "pin_memory": pin_memory,
+    }
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = True
+        loader_kwargs["prefetch_factor"] = 2
 
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device_obj)
@@ -113,12 +167,27 @@ def score_clips(
         transform=mask_transform,
     )
 
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    loader = DataLoader(dataset, **loader_kwargs)
 
-    logger.info(f"Scoring {len(dataset)} tubelets...")
+    logger.info(f"Scoring {len(dataset)} tubelets with num_workers={num_workers}...")
 
     if summary_output is None:
         summary_output = derive_summary_output_path(output_path)
+    Path(summary_output).parent.mkdir(parents=True, exist_ok=True)
+
+    amp_dtype: Optional[torch.dtype] = None
+    amp_device_type: Optional[str] = None
+    if amp != "none":
+        if device_obj.type == "cuda":
+            amp_device_type = "cuda"
+            amp_dtype = torch.float16
+            if amp in ("auto", "bf16") and torch.cuda.is_bf16_supported():
+                amp_dtype = torch.bfloat16
+            elif amp == "fp16":
+                amp_dtype = torch.float16
+        elif device_obj.type == "cpu" and amp in ("auto", "bf16"):
+            amp_device_type = "cpu"
+            amp_dtype = torch.bfloat16
 
     process = psutil.Process() if psutil is not None else None
     if process is None:
@@ -134,16 +203,22 @@ def score_clips(
     max_current_rss_mb = baseline_current_rss_mb
 
     with open(output_path, "w") as f:
-        with torch.no_grad():
+        with torch.inference_mode():
             for batch_idx, batch in enumerate(tqdm(loader)):
                 rss_before_batch_mb = _get_current_rss_mb(process)
 
-                masked = batch["masked_frames"].to(device_obj)
-                clean = batch["clean_frames"].to(device_obj)
-                mask_frac = batch["mask_frac"].to(device_obj)
+                masked = batch["masked_frames"].to(device_obj, non_blocking=non_blocking)
+                clean = batch["clean_frames"].to(device_obj, non_blocking=non_blocking)
+                mask_frac = batch["mask_frac"].to(device_obj, non_blocking=non_blocking)
 
                 start = time.perf_counter()
-                clean_emb, pred_emb = model(clean, masked, mask_frac)
+                amp_context = (
+                    torch.autocast(device_type=amp_device_type, dtype=amp_dtype)
+                    if amp_device_type is not None and amp_dtype is not None
+                    else nullcontext()
+                )
+                with amp_context:
+                    clean_emb, pred_emb = model(clean, masked, mask_frac)
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
 
                 clean_np = clean_emb.cpu().numpy()
@@ -206,6 +281,7 @@ def score_clips(
         "checkpoint": checkpoint_path,
         "manifest": manifest_path,
         "output_jsonl": output_path,
+        "summary_json": summary_output,
         "runtime_ms": distribution_stats(runtime_ms_values),
         "energy_joules": distribution_stats(energy_joules_values),
         "memory_overhead_mb": {
@@ -225,6 +301,7 @@ def score_clips(
     with open(summary_output, "w") as sf:
         json.dump(summary, sf, indent=2)
 
+    _append_run_index(summary, summary_output)
     logger.info(f"Cost summary saved to {summary_output}")
 
 
@@ -239,7 +316,29 @@ def main():
         help="Root directory for data files (overrides config)",
     )
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
-    parser.add_argument("--device", default="cpu", help="Device (cpu/cuda/mps)")
+    parser.add_argument(
+        "--device",
+        default="auto",
+        help="Device (auto/cpu/cuda/mps). auto prefers cuda, then mps, then cpu.",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="DataLoader workers (default: auto-tuned per device)",
+    )
+    parser.add_argument(
+        "--cpu-threads",
+        type=int,
+        default=None,
+        help="Override torch CPU thread count",
+    )
+    parser.add_argument(
+        "--amp",
+        default="auto",
+        choices=["auto", "none", "fp16", "bf16"],
+        help="Automatic mixed precision mode",
+    )
     parser.add_argument(
         "--power-watts",
         type=float,
@@ -276,6 +375,9 @@ def main():
         summary_output=args.summary_output,
         warmup_batches=max(0, args.warmup_batches),
         no_cost_metrics=args.no_cost_metrics,
+        num_workers=args.num_workers,
+        amp=args.amp,
+        cpu_threads=args.cpu_threads,
     )
 
 

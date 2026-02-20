@@ -1,7 +1,6 @@
 """JEPA Evaluation Metrics"""
 
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 
 def l2_normalize(arr: np.ndarray) -> np.ndarray:
@@ -38,10 +37,8 @@ def compute_cosine_similarity(
     pred_norm = l2_normalize(pred_emb)
     target_norm = l2_normalize(target_emb)
     
-    # Compute cosine similarity
-    # Returns matrix (N, N), we want diagonal elements (corresponding pairs)
-    cos_sim_matrix = cosine_similarity(pred_norm, target_norm)
-    cos_sims = np.diag(cos_sim_matrix)
+    # Pairwise row-wise cosine between corresponding embeddings.
+    cos_sims = np.sum(pred_norm * target_norm, axis=1)
     
     return float(cos_sims.mean())
 
@@ -64,8 +61,8 @@ def compute_novelty_score(
     pred_norm = l2_normalize(pred_emb)
     target_norm = l2_normalize(target_emb)
     
-    cos_sim_matrix = cosine_similarity(pred_norm, target_norm)
-    cos_sims = np.diag(cos_sim_matrix)
+    # Pairwise row-wise cosine between corresponding embeddings.
+    cos_sims = np.sum(pred_norm * target_norm, axis=1)
     
     # Novelty = distance = 1 - similarity
     return 1.0 - cos_sims
