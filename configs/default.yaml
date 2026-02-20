@@ -51,5 +51,32 @@ evaluation:
 
 inference:
   batch_size: 1
-  device: "cpu"
+  device: "auto"
   output_format: "jsonl"
+  power_watts: 75.0
+  warmup_batches: 1
+  no_cost_metrics: false
+  amp: "auto"
+  cpu_threads: null
+  num_workers: null
+
+paper:
+  experiments_root: "experiments/paper_runs"
+  default_hypothesis: "baseline"
+  hypotheses:
+    baseline:
+      description: "Default JEPA pipeline for paper baseline."
+      overrides: {}
+    smoke:
+      description: "Fast local validation run."
+      overrides:
+        data:
+          manifest_path: "outputs/mini_manifest.jsonl"
+          batch_size: 1
+          train_split: 0.5
+        training:
+          epochs: 1
+        evaluation:
+          batch_size: 1
+        inference:
+          batch_size: 1

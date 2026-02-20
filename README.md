@@ -27,6 +27,35 @@ experiments/
 ├── checkpoints/        # Training checkpoints
 └── inference_runs/     # Timestamped inference summaries + index
 
+## Paper Pipeline
+
+Run the full train -> eval -> inference pipeline with one flag:
+
+```bash
+python scripts/paper_run.py --hypothesis baseline
+```
+
+The hypothesis must exist in `configs/default.yaml` under:
+
+`paper.hypotheses.<hypothesis>`
+
+Each run is organized by datetime + hypothesis:
+
+`experiments/paper_runs/YYYY-MM-DD/HHMMSS_<hypothesis>/`
+
+With stage directories:
+- `training/`
+- `evaluation/`
+- `inference/`
+
+And run artifacts:
+- `resolved_config.yaml`
+- `run_summary.json`
+
+A global run index is appended to:
+
+`experiments/paper_runs/index.jsonl`
+
 configs/                # Configuration
 └── default.yaml        # Research hyperparameters
 
