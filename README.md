@@ -21,7 +21,11 @@ src/jepa/               # Core package
 
 scripts/                # CLI utilities
 ├── eval.py             # CPU evaluation script
-└── inference.py        # CPU inference/scoring script
+└── inference.py        # CPU/GPU inference/scoring script
+
+experiments/
+├── checkpoints/        # Training checkpoints
+└── inference_runs/     # Timestamped inference summaries + index
 
 configs/                # Configuration
 └── default.yaml        # Research hyperparameters
@@ -77,8 +81,9 @@ Score clips to identify novel/hard scenarios:
 python scripts/inference.py \
   --checkpoint experiments/checkpoints/best_model.pt \
   --manifest new_clips.jsonl \
-  --output scores.jsonl \
-  --summary-output scores.summary.json \
+  --output outputs/scores.jsonl \
+  --device auto \
+  --amp auto \
   --power-watts 75
 ```
 
@@ -87,7 +92,11 @@ Output `scores.jsonl` contains novelty scores and per-clip cost telemetry:
 {"score": 0.45, "scene": "scene-001", "camera": "CAM_FRONT", "tubelet_idx": 0, "runtime_ms": 18.27, "energy_joules": 1.37, "memory_overhead_mb": 0.22}
 ```
 
-Run-level cost summary is written to `scores.summary.json`:
+Run-level cost summary is written to a timestamped path under
+`experiments/inference_runs/YYYY-MM-DD/HHMMSS_<run_label>/summary.json`.
+An index entry is appended to `experiments/inference_runs/index.jsonl`.
+
+Example summary:
 ```json
 {
   "num_samples": 128,

@@ -14,11 +14,15 @@ def test_compute_energy_joules():
 
 
 def test_derive_summary_output_path_jsonl():
-    assert derive_summary_output_path("scores.jsonl") == "scores.summary.json"
+    output_path = derive_summary_output_path("scores.jsonl")
+    assert output_path.startswith("experiments/inference_runs/")
+    assert output_path.endswith("_scores/summary.json")
 
 
 def test_derive_summary_output_path_non_jsonl():
-    assert derive_summary_output_path("scores.out") == "scores.out.summary.json"
+    output_path = derive_summary_output_path("scores.out")
+    assert output_path.startswith("experiments/inference_runs/")
+    assert output_path.endswith("_scores/summary.json")
 
 
 def test_distribution_stats_values():

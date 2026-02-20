@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
@@ -13,12 +14,23 @@ def compute_energy_joules(runtime_ms: float, power_watts: float) -> float:
     return (runtime_ms / 1000.0) * power_watts
 
 
-def derive_summary_output_path(output_path: str) -> str:
-    """Derive default summary path from a JSONL output path."""
+def derive_summary_output_path(
+    output_path: str,
+    experiments_root: str = "experiments",
+    task_name: str = "inference_runs",
+) -> str:
+    """Build a timestamped summary path under experiments for longitudinal tracking."""
     output = Path(output_path)
-    if output.suffix == ".jsonl":
-        return str(output.with_suffix(".summary.json"))
-    return f"{output_path}.summary.json"
+    run_label = output.stem if output.stem else "run"
+    safe_label = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in run_label)
+
+    now = datetime.now()
+    day_bucket = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%H%M%S")
+
+    run_dir = Path(experiments_root) / task_name / day_bucket / f"{timestamp}_{safe_label}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return str(run_dir / "summary.json")
 
 
 def distribution_stats(values: List[float]) -> Dict[str, float]:
