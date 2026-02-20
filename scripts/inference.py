@@ -119,7 +119,13 @@ def score_clips(
 
     if num_workers is None:
         cpu_count = os.cpu_count() or 1
-        num_workers = 0 if device_obj.type == "mps" else min(max(cpu_count - 1, 0), 8)
+        if device_obj.type == "mps":
+            num_workers = 0
+        elif sys.platform == "darwin" and device_obj.type == "cpu":
+            # Avoid torch_shm_manager failures in macOS sandboxed environments.
+            num_workers = 0
+        else:
+            num_workers = min(max(cpu_count - 1, 0), 8)
 
     pin_memory = device_obj.type == "cuda"
     non_blocking = device_obj.type == "cuda"
