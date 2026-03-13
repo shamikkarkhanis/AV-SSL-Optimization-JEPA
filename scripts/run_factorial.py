@@ -1,4 +1,4 @@
-"""Run full-factorial experiment batches using the JEPA paper pipeline."""
+"""Run full-factorial experiment batches using the stage-based pipeline."""
 
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ import yaml
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from jepa.experiments import apply_overrides, build_full_factorial_runs
-from paper_run import run_pipeline
+from jepa.config import load_and_resolve_config
+from jepa.pipeline import run_experiment
 
 
 logging.basicConfig(level=logging.INFO)
@@ -63,37 +64,23 @@ def _build_hypothesis_name(run_spec: Dict[str, Any]) -> str:
 
 
 def _extract_metrics(run_summary: Dict[str, Any]) -> Dict[str, Any]:
-    eval_summary = run_summary.get("evaluation_summary", {})
-    inference_summary_path = run_summary.get("inference_summary_json")
-    inference_summary = {}
-    if inference_summary_path:
-        with open(inference_summary_path, "r") as f:
-            inference_summary = json.load(f)
-
+    evaluation_summary = run_summary.get("evaluation", {}) or {}
+    ranking_metrics = evaluation_summary.get("ranking_metrics", {}) or {}
+    model_health = evaluation_summary.get("model_health", {}) or {}
+    scoring_summary = run_summary.get("scoring", {}) or {}
+    training_summary = run_summary.get("training", {}) or {}
     return {
-        "evaluation.mean_cosine_similarity": eval_summary.get("mean_cosine_similarity"),
-        "evaluation.target_similarity": eval_summary.get("target_similarity"),
-        "evaluation.hypothesis_passed": eval_summary.get("hypothesis_passed"),
-        "inference.runtime_ms.mean": (
-            inference_summary.get("runtime_ms", {}).get("mean")
-        ),
-        "inference.energy_joules.total": (
-            inference_summary.get("energy_joules", {}).get("total")
-        ),
-        "inference.memory_overhead_mb.peak_rss_delta": (
-            inference_summary.get("memory_overhead_mb", {}).get("peak_rss_delta")
-        ),
+        "evaluation.average_precision": ranking_metrics.get("average_precision"),
+        "evaluation.precision_at_10": (ranking_metrics.get("precision_at_k", {}) or {}).get("10"),
+        "evaluation.recall_at_10": (ranking_metrics.get("recall_at_k", {}) or {}).get("10"),
+        "evaluation.ndcg": ranking_metrics.get("ndcg"),
+        "evaluation.mean_cosine_similarity": model_health.get("mean_cosine_similarity"),
+        "scoring.clips_per_second": scoring_summary.get("clips_per_second"),
+        "scoring.latency_ms.mean": (scoring_summary.get("latency_ms", {}) or {}).get("mean"),
+        "scoring.estimated_energy_joules": scoring_summary.get("estimated_energy_joules"),
+        "training.total_train_time_seconds": training_summary.get("total_train_time_seconds"),
+        "training.peak_memory_mb": training_summary.get("peak_memory_mb"),
     }
-
-
-def _prepare_base_config(
-    base_config: Dict[str, Any],
-    experiments_root: str,
-) -> Dict[str, Any]:
-    cfg = deepcopy(base_config)
-    cfg.setdefault("paper", {})
-    cfg["paper"]["experiments_root"] = experiments_root
-    return cfg
 
 
 def main() -> None:
@@ -140,7 +127,7 @@ def main() -> None:
     factorial_cfg = _load_yaml(factorial_cfg_path)
 
     base_config_path = Path(factorial_cfg.get("base_config", "configs/default.yaml"))
-    base_config = _load_yaml(base_config_path)
+    base_config = load_and_resolve_config(base_config_path)
     experiments_root = str(
         factorial_cfg.get("experiments_root", "experiments/factorial_runs")
     )
@@ -212,7 +199,6 @@ def main() -> None:
             json.dump(batch_summary, f, indent=2)
         return
 
-    prepared_base = _prepare_base_config(base_config, experiments_root)
     batch_summary["status"] = "running"
     with open(batch_summary_path, "w") as f:
         json.dump(batch_summary, f, indent=2)
@@ -220,10 +206,14 @@ def main() -> None:
     for idx, spec in enumerate(run_specs, start=1):
         hypothesis_name = _build_hypothesis_name(spec)
         run_config = apply_overrides(
-            base_config=prepared_base,
+            base_config=base_config,
             factor_levels=spec["factor_levels"],
             replicate_seed=spec["replicate_seed"],
         )
+        run_config.setdefault("experiment", {})
+        run_config["experiment"]["name"] = hypothesis_name
+        run_config["experiment"]["output_root"] = experiments_root
+        run_dir = batch_root / "runs" / hypothesis_name
 
         run_start = time.time()
         logger.info(
@@ -234,7 +224,7 @@ def main() -> None:
             spec["factor_levels"],
             spec["replicate_seed"],
         )
-        run_summary = run_pipeline(config=run_config, hypothesis_name=hypothesis_name)
+        run_summary = run_experiment(config=run_config, run_dir=run_dir)
         elapsed_s = time.time() - run_start
 
         row = {
@@ -246,7 +236,8 @@ def main() -> None:
             "factor_levels": spec["factor_levels"],
             "hypothesis_name": hypothesis_name,
             "elapsed_seconds": elapsed_s,
-            "run_summary_json": str(Path(run_summary["run_root"]) / "run_summary.json"),
+            "run_dir": str(run_dir),
+            "run_summary_json": str(run_dir / "summary.json"),
             "metrics": _extract_metrics(run_summary),
         }
         with open(results_path, "a") as f:

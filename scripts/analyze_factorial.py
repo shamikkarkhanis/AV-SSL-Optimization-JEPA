@@ -150,9 +150,9 @@ def main() -> None:
         metric_keys = list(cfg["response_metrics"])
     else:
         metric_keys = [
-            "evaluation.mean_cosine_similarity",
-            "inference.runtime_ms.mean",
-            "inference.energy_joules.total",
+            "evaluation.average_precision",
+            "evaluation.precision_at_10",
+            "scoring.latency_ms.mean",
         ]
 
     output_dir = (
@@ -213,4 +213,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
