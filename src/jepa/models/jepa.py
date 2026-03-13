@@ -26,11 +26,16 @@ class JEPAModel(nn.Module):
         predictor_hidden: int = 1024,
         predictor_dropout: float = 0.1,
         freeze_encoder: bool = True,
+        encoder_init_mode: str = "pretrained",
     ):
         super().__init__()
         
         # Encoder (frozen by default)
-        self.encoder = VJEPAEncoder(model_name=encoder_name, freeze=freeze_encoder)
+        self.encoder = VJEPAEncoder(
+            model_name=encoder_name,
+            freeze=freeze_encoder,
+            init_mode=encoder_init_mode,
+        )
         
         # Predictor (trainable)
         self.predictor = PredictorHead(

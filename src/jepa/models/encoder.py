@@ -1,8 +1,8 @@
-"""VJEPA Encoder Wrapper"""
+"""VJEPA Encoder wrapper with pretrained and scratch init modes."""
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel
+from transformers import AutoConfig, AutoModel
 
 
 class VJEPAEncoder(nn.Module):
@@ -20,11 +20,15 @@ class VJEPAEncoder(nn.Module):
         self,
         model_name: str = "facebook/vjepa2-vitl-fpc64-256",
         freeze: bool = True,
+        init_mode: str = "pretrained",
     ):
         super().__init__()
 
-        # Load pretrained VJEPA model
-        self.model = AutoModel.from_pretrained(model_name)
+        if init_mode == "scratch":
+            config = AutoConfig.from_pretrained(model_name)
+            self.model = AutoModel.from_config(config)
+        else:
+            self.model = AutoModel.from_pretrained(model_name)
 
         # Freeze parameters (no fine-tuning)
         if freeze:
@@ -33,6 +37,7 @@ class VJEPAEncoder(nn.Module):
             self.model.eval()  # Set to evaluation mode
 
         self.model_name = model_name
+        self.init_mode = init_mode
         self.embedding_dim = 1024  # VJEPA-L output dimension
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:

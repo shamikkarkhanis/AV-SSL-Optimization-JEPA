@@ -1,6 +1,4 @@
 """Transforms for JEPA Training - Masking Logic"""
-
-import random
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -40,9 +38,26 @@ class MaskTubelet:
         self.patch_size = patch_size
         self.fill_value = fill_value
         self.seed = seed
+        self._call_count = 0
         
         # PIL to tensor transform
         self.to_tensor = T.ToTensor()
+
+    def _next_seed(self) -> Optional[int]:
+        """Derive a deterministic but changing seed for each sample call.
+
+        A fixed seed passed directly into ``mask_tubelet_pixels`` would recreate the
+        same mask pattern on every sample because that function re-initializes the RNG
+        from the provided seed. We derive a new seed per transform call instead.
+        """
+        if self.seed is None:
+            return None
+
+        worker_info = torch.utils.data.get_worker_info()
+        worker_id = worker_info.id if worker_info is not None else 0
+        derived_seed = int(self.seed) + (worker_id * 1_000_000) + self._call_count
+        self._call_count += 1
+        return derived_seed
     
     def __call__(self, frames: List[Image.Image]) -> dict:
         """Apply masking to a list of PIL Images.
@@ -61,7 +76,7 @@ class MaskTubelet:
             tubelet,
             mask_ratio=self.mask_ratio,
             patch_size=self.patch_size,
-            seed=self.seed,
+            seed=self._next_seed(),
             fill_value=self.fill_value,
         )
         

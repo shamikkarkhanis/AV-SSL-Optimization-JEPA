@@ -1,0 +1,27 @@
+base_config: configs/default.yaml
+experiments_root: experiments/factorial_runs
+design_type: full
+
+tracking:
+  design_id: fx_v1
+  hypothesis: "Initialization and model capacity change ranking quality and scoring efficiency."
+  primary_metric: evaluation.average_precision
+  decision_rule: "maximize primary metric while monitoring scoring.latency_ms.mean"
+
+# Replicate seeds (repeat every factor combination with each seed)
+replicates:
+  - 11
+  - 22
+  - 33
+
+# Dot-path keys map directly into default config fields.
+factors:
+  dataset.mask_ratio: [0.5, 0.75]
+  model.predictor.hidden_dim: [512, 1024]
+  train.lr: [0.0001, 0.0003]
+
+# Metrics extracted into factorial results and downstream analysis.
+response_metrics:
+  - evaluation.average_precision
+  - evaluation.precision_at_10
+  - scoring.latency_ms.mean
