@@ -1,0 +1,16 @@
+{"score": 0.998687207698822, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 0, "runtime_ms": 615.4437500008498, "energy_joules": 46.15828125006374, "memory_overhead_mb": 0.0}
+{"score": 0.9933881163597107, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 1, "runtime_ms": 474.379332998069, "energy_joules": 35.578449974855175, "memory_overhead_mb": 0.0}
+{"score": 0.9793563485145569, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 2, "runtime_ms": 473.0897909976193, "energy_joules": 35.481734324821446, "memory_overhead_mb": 0.0}
+{"score": 0.9876171350479126, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 3, "runtime_ms": 473.7022499975865, "energy_joules": 35.527668749818986, "memory_overhead_mb": 0.0}
+{"score": 0.9946391582489014, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 4, "runtime_ms": 470.60333300032653, "energy_joules": 35.29524997502449, "memory_overhead_mb": 0.0}
+{"score": 0.988322913646698, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 5, "runtime_ms": 470.97445899999, "energy_joules": 35.32308442499925, "memory_overhead_mb": 0.0}
+{"score": 1.0017876625061035, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 6, "runtime_ms": 471.17216599872336, "energy_joules": 35.33791244990425, "memory_overhead_mb": 0.0}
+{"score": 1.0052099227905273, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 7, "runtime_ms": 472.80887499800883, "energy_joules": 35.46066562485066, "memory_overhead_mb": 0.0}
+{"score": 1.0043729543685913, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 0, "runtime_ms": 472.66270899854135, "energy_joules": 35.4497031748906, "memory_overhead_mb": 0.0}
+{"score": 0.993429958820343, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 1, "runtime_ms": 471.22133300217683, "energy_joules": 35.34159997516326, "memory_overhead_mb": 0.0}
+{"score": 0.9991195201873779, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 2, "runtime_ms": 471.4315830024134, "energy_joules": 35.357368725181004, "memory_overhead_mb": 0.0}
+{"score": 0.9966993927955627, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 3, "runtime_ms": 472.84162500000093, "energy_joules": 35.46312187500007, "memory_overhead_mb": 0.0}
+{"score": 0.9927789568901062, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 4, "runtime_ms": 471.3462500003516, "energy_joules": 35.35096875002637, "memory_overhead_mb": 0.0}
+{"score": 0.9994106292724609, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 5, "runtime_ms": 470.4227920010453, "energy_joules": 35.2817094000784, "memory_overhead_mb": 0.0}
+{"score": 0.9968721270561218, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 6, "runtime_ms": 472.11416700156406, "energy_joules": 35.408562525117304, "memory_overhead_mb": 0.0}
+{"score": 0.9897846579551697, "scene": "n008-2018-08-01-15-16-36-0400", "camera": "CAM_FRONT", "tubelet_idx": 7, "runtime_ms": 471.2840829997731, "energy_joules": 35.34630622498298, "memory_overhead_mb": 0.0}

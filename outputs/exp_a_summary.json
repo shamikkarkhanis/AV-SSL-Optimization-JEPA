@@ -1,0 +1,31 @@
+{
+  "num_samples": 16,
+  "batch_size": 1,
+  "device": "cpu",
+  "power_watts": 75.0,
+  "checkpoint": "experiments/checkpoints/quick_checkpoint.pt",
+  "manifest": "outputs/mini_manifest.jsonl",
+  "output_jsonl": "outputs/exp_a_scores.jsonl",
+  "runtime_ms": {
+    "mean": 865.951894333557,
+    "p50": 779.9497500018333,
+    "p95": 1123.4279329008127,
+    "min": 703.1192499998724,
+    "max": 1380.4480409999087,
+    "total": 12989.278415003355
+  },
+  "energy_joules": {
+    "mean": 64.94639207501677,
+    "p50": 58.4962312501375,
+    "p95": 84.25709496756096,
+    "min": 52.73394374999043,
+    "max": 103.53360307499315,
+    "total": 974.1958811252516
+  },
+  "memory_overhead_mb": {
+    "peak_rss_delta": 0.0,
+    "mean_per_batch_delta": 2.457291666666667,
+    "mean_per_batch_signed_delta": 2.0875
+  },
+  "memory_metric_source": "psutil_rss"
+}

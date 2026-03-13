@@ -6,6 +6,7 @@ from .inference_cost import (
     derive_summary_output_path,
     distribution_stats,
 )
+from .ranking import compute_ranking_metrics, join_scores_and_labels
 
 __all__ = [
     "compute_cosine_similarity",
@@ -14,4 +15,6 @@ __all__ = [
     "compute_energy_joules",
     "derive_summary_output_path",
     "distribution_stats",
+    "compute_ranking_metrics",
+    "join_scores_and_labels",
 ]

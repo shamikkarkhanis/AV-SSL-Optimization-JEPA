@@ -1,8 +1,7 @@
 """Smoke tests for Training Utilities"""
 
-import pytest
 import torch
-from src.jepa.training import jepa_loss
+from jepa.training import jepa_loss
 
 def test_jepa_loss():
     """Test JEPA loss computation."""

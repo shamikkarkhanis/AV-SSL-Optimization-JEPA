@@ -1,7 +1,8 @@
-"""JEPA Training Loop"""
+"""JEPA training loop."""
 
 import logging
-from typing import Dict, Optional, Union
+from contextlib import nullcontext
+from typing import Callable, Dict, Optional, Union
 from pathlib import Path
 
 import torch
@@ -34,12 +35,20 @@ class Trainer:
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         checkpoint_dir: Union[str, Path] = "experiments/checkpoints",
+        amp_context_factory: Optional[Callable[[], object]] = None,
+        grad_accum_steps: int = 1,
+        normalize_embeddings: bool = True,
+        encoder_mode: str = "frozen",
     ):
         self.model = model
         self.optimizer = optimizer
         self.device = device
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.amp_context_factory = amp_context_factory or nullcontext
+        self.grad_accum_steps = max(int(grad_accum_steps), 1)
+        self.normalize_embeddings = normalize_embeddings
+        self.encoder_mode = encoder_mode
         
     def train_epoch(self, loader: DataLoader, epoch: int) -> float:
         """Run one training epoch.
@@ -52,14 +61,17 @@ class Trainer:
             Average loss for the epoch
         """
         self.model.train()
-        # Only set predictor to train mode (encoder stays frozen)
-        self.model.encoder.eval()
+        if self.encoder_mode == "frozen":
+            self.model.encoder.eval()
+        else:
+            self.model.encoder.train()
         self.model.predictor.train()
         
         total_loss = 0.0
         
+        self.optimizer.zero_grad()
         pbar = tqdm(loader, desc=f"Train Epoch {epoch}")
-        for batch in pbar:
+        for step_idx, batch in enumerate(pbar, start=1):
             # Move data to device
             masked = batch["masked_frames"].to(self.device)
             clean = batch["clean_frames"].to(self.device)
@@ -67,20 +79,28 @@ class Trainer:
             
             # Forward pass
             # clean_emb: Target, pred_emb: Prediction
-            clean_emb, pred_emb = self.model(clean, masked, mask_frac)
-            
-            # Calculate loss (normalized L1)
-            loss = jepa_loss(pred_emb, clean_emb, normalize=True)
-            
-            # Backward pass
-            self.optimizer.zero_grad()
+            with self.amp_context_factory():
+                clean_emb, pred_emb = self.model(clean, masked, mask_frac)
+                loss = jepa_loss(
+                    pred_emb,
+                    clean_emb,
+                    normalize=self.normalize_embeddings,
+                ) / self.grad_accum_steps
+
             loss.backward()
-            self.optimizer.step()
+
+            if step_idx % self.grad_accum_steps == 0:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
             
             # Update metrics
-            loss_val = loss.item()
+            loss_val = loss.item() * self.grad_accum_steps
             total_loss += loss_val
             pbar.set_postfix({"loss": f"{loss_val:.4f}"})
+
+        if len(loader) % self.grad_accum_steps != 0:
+            self.optimizer.step()
+            self.optimizer.zero_grad()
             
         return total_loss / len(loader)
     
@@ -104,8 +124,13 @@ class Trainer:
                 clean = batch["clean_frames"].to(self.device)
                 mask_frac = batch["mask_frac"].to(self.device)
                 
-                clean_emb, pred_emb = self.model(clean, masked, mask_frac)
-                loss = jepa_loss(pred_emb, clean_emb, normalize=True)
+                with self.amp_context_factory():
+                    clean_emb, pred_emb = self.model(clean, masked, mask_frac)
+                    loss = jepa_loss(
+                        pred_emb,
+                        clean_emb,
+                        normalize=self.normalize_embeddings,
+                    )
                 
                 total_loss += loss.item()
                 pbar.set_postfix({"loss": f"{loss.item():.4f}"})

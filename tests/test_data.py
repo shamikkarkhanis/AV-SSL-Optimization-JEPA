@@ -1,9 +1,8 @@
 """Smoke tests for Data Module"""
 
-import pytest
 import torch
 from PIL import Image
-from src.jepa.data import MaskTubelet
+from jepa.data import MaskTubelet
 
 def test_mask_tubelet_shapes():
     """Test if MaskTubelet produces correct tensor shapes."""
@@ -29,3 +28,14 @@ def test_mask_tubelet_shapes():
     
     # Check mask fraction
     assert 0.7 <= output["mask_frac"].item() <= 0.8  # Approx 75%
+
+
+def test_mask_tubelet_seeded_calls_produce_different_masks():
+    """A fixed base seed should still yield different masks across samples."""
+    frames = [Image.new("RGB", (224, 224)) for _ in range(2)]
+    transform = MaskTubelet(mask_ratio=0.75, patch_size=16, seed=42)
+
+    out1 = transform(frames)
+    out2 = transform(frames)
+
+    assert not torch.equal(out1["mask"], out2["mask"])

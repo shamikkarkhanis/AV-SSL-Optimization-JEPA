@@ -1,0 +1,27 @@
+base_config: configs/default.yaml
+experiments_root: experiments/factorial_runs
+design_type: full
+
+tracking:
+  design_id: fx_v1
+  hypothesis: "Lower mask_ratio and larger predictor hidden_dim improve cosine similarity."
+  primary_metric: evaluation.mean_cosine_similarity
+  decision_rule: "maximize primary metric while monitoring inference.runtime_ms.mean"
+
+# Replicate seeds (repeat every factor combination with each seed)
+replicates:
+  - 11
+  - 22
+  - 33
+
+# Dot-path keys map directly into default config fields.
+factors:
+  data.mask_ratio: [0.5, 0.75]
+  model.predictor.hidden_dim: [512, 1024]
+  training.lr: [0.0001, 0.0003]
+
+# Metrics extracted into factorial results and downstream analysis.
+response_metrics:
+  - evaluation.mean_cosine_similarity
+  - inference.runtime_ms.mean
+  - inference.energy_joules.total

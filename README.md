@@ -56,6 +56,48 @@ A global run index is appended to:
 
 `experiments/paper_runs/index.jsonl`
 
+## Factorial Experiments (DOE)
+
+Run a full-factorial batch from `configs/factorial.yaml`:
+
+```bash
+python scripts/run_factorial.py --config configs/factorial.yaml
+```
+
+Override tracking metadata from CLI (optional):
+
+```bash
+python scripts/run_factorial.py \
+  --config configs/factorial.yaml \
+  --design-id fx_v2 \
+  --hypothesis "Lower mask_ratio improves cosine under latency budget." \
+  --primary-metric evaluation.mean_cosine_similarity \
+  --decision-rule "maximize primary metric with inference.runtime_ms.mean <= 200"
+```
+
+Optional dry-run to generate only the design matrix:
+
+```bash
+python scripts/run_factorial.py --config configs/factorial.yaml --dry-run
+```
+
+Each batch writes:
+- `design_matrix.jsonl` (all factor/replicate combinations)
+- `results.jsonl` (one row per completed run with extracted metrics)
+- `batch_summary.json` (design/hypothesis metadata + progress/status)
+
+Analyze a completed batch:
+
+```bash
+python scripts/analyze_factorial.py \
+  --results experiments/factorial_runs/<date>/batch_<time>/results.jsonl \
+  --factorial-config configs/factorial.yaml
+```
+
+Analysis outputs include per-metric CSVs for:
+- Main effects by factor level
+- Two-way interaction tables
+
 configs/                # Configuration
 └── default.yaml        # Research hyperparameters
 
