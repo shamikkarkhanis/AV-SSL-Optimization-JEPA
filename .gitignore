@@ -1,6 +1,7 @@
 data/raw/
 .DS_Store
 __pycache__
+*.pyc
 renders
 v1.0-mini
 

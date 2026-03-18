@@ -18,36 +18,82 @@
 
 \maketitle
 
-% --- FRONT MATTER ---
 \begin{abstract}
-    % Summary of the problem, approach, and results.
+We study self-supervised clip ranking for autonomous driving video, with the goal of assigning a review-value score to short clips before human inspection. The paper evaluates a JEPA-style prediction objective as a proxy for novelty and review priority, and reports both ranking quality and inference efficiency. We use a three-way split protocol: \texttt{train} for fitting, \texttt{val} for checkpoint selection and development-time analysis, and \texttt{test} for final reported results.
 \end{abstract}
 
-% --- MAIN BODY ---
 \section{Introduction}
-    % Context, motivation, and problem statement.
+This paper addresses the problem of ranking driving clips by likely review value. In large-scale autonomous vehicle datasets, the majority of clips are routine, while only a small subset contains rare, informative, or failure-relevant events. A useful ranking model should surface those clips early while remaining computationally practical.
+
+Our working hypothesis is that a JEPA-style representation predictor can produce a meaningful unsupervised novelty signal for clip ranking. The core question is whether this proxy improves prioritization quality enough to justify its inference cost.
 
 \section{Related Work}
-    % Discussion of existing literature (e.g., VideoMAE, Self-Supervised Learning).
+This section should position the work relative to:
+\begin{itemize}
+    \item self-supervised video representation learning,
+    \item masked video modeling and JEPA-style prediction objectives,
+    \item active curation, novelty detection, and clip triage for driving data,
+    \item ranking metrics for retrieval and prioritization.
+\end{itemize}
 
-\section{Methodology}
-    \subsection{Architectural Overview}
-    \subsection{Objective Functions}
-    % Equations and theoretical framework.
+\section{Problem Setup}
+Let each clip be a short temporal sequence of frames with optional human review labels available only for benchmarking. The model produces a scalar \texttt{review\_value\_score} for each clip, and evaluation measures whether high-scoring clips align with high-value human judgments.
+
+The paper should define:
+\begin{itemize}
+    \item the clip construction process,
+    \item the label taxonomy used for benchmarking,
+    \item the ranking task and evaluation targets,
+    \item the distinction between unsupervised scoring and supervised benchmarking.
+\end{itemize}
+
+\section{Method}
+\subsection{Architectural Overview}
+Describe the encoder, predictor, masking strategy, and tubelet-based processing pipeline.
+
+\subsection{Training Objective}
+Describe the embedding prediction objective and any normalization or loss choices used during training.
+
+\subsection{Scoring Rule}
+Describe how clip-level scores are aggregated from tubelet-level outputs. In the current implementation, the score is derived from prediction novelty via cosine disagreement between predicted and target embeddings.
 
 \section{Experimental Setup}
-    \subsection{Datasets}
-    \subsection{Implementation Details}
+\subsection{Dataset and Splits}
+Use the split protocol explicitly:
+\begin{itemize}
+    \item \texttt{train}: fit model parameters,
+    \item \texttt{val}: select checkpoints, tune settings, and analyze ranking behavior during development,
+    \item \texttt{test}: report final paper metrics once the method is fixed.
+\end{itemize}
 
-\section{Results and Discussion}
-    % Tables, figures, and comparative analysis.
+This split usage should be stated clearly to avoid mixing development-time decisions with final reported results.
+
+\subsection{Implementation Details}
+Document the model variant, initialization strategy, encoder freeze/finetune setting, batch sizes, hardware profile, and runtime configuration used in experiments.
+
+\section{Results on Validation}
+This section should summarize development-time findings:
+\begin{itemize}
+    \item validation ranking metrics used to compare variants,
+    \item checkpoint selection criteria,
+    \item ablations on initialization, model capacity, or scoring aggregation,
+    \item qualitative inspection of highly ranked clips.
+\end{itemize}
+
+\section{Final Test Evaluation}
+This section should contain the headline paper numbers. Once model choices are fixed on \texttt{val}, run the final scoring and labeled evaluation on \texttt{test} and report the primary ranking metrics here.
+
+\section{Efficiency and Inference Cost}
+Report throughput, latency, peak memory, and estimated energy usage for scoring. This section should make the tradeoff between ranking quality and deployment cost explicit.
+
+\section{Discussion and Limitations}
+Discuss what the novelty proxy captures well, where it fails, how sensitive it is to split construction and label quality, and whether ranking quality generalizes from \texttt{val} to \texttt{test}.
 
 \section{Conclusion}
-    % Final summary and future directions.
+Summarize the main empirical findings, the practical value of the ranking pipeline, and the most important next steps for improving both quality and efficiency.
 
-% --- BACK MATTER ---
 \section*{Acknowledgments}
-    % Optional acknowledgments.
+Optional.
 
 {\small
 \bibliographystyle{ieee_fullname}

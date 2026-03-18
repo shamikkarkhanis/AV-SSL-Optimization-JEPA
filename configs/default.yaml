@@ -9,7 +9,7 @@ dataset:
   mask_ratio: 0.75
   training_manifest: "data/manifests/clip_manifest_new.jsonl"
   training_split: "train"
-  scoring_manifest: "data/manifests/test_manifest.jsonl"
+  scoring_manifest: "data/manifests/clip_manifest_new.jsonl"
   scoring_split: "val"
   evaluation_manifest: "data/manifests/clip_manifest_new.jsonl"
   evaluation_split: "val"
