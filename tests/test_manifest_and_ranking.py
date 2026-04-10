@@ -29,9 +29,9 @@ def test_label_join_and_ranking_metrics():
         {"clip_id": "c", "review_value_score": 0.1, "mean_cosine_similarity": 0.9},
     ]
     labels = [
-        {"clip_id": "a", "adjudicated_label": "high_value"},
-        {"clip_id": "b", "adjudicated_label": "medium_value"},
-        {"clip_id": "c", "adjudicated_label": "low_value"},
+        {"clip_id": "a", "binary_label": 1},
+        {"clip_id": "b", "binary_label": 1},
+        {"clip_id": "c", "binary_label": 0},
     ]
     joined = join_scores_and_labels(scores, labels)
     metrics = compute_ranking_metrics(joined, k_values=[1, 2, 3])
@@ -45,9 +45,9 @@ def test_label_join_and_ranking_metrics():
 def test_load_evaluation_labels_jsonl(tmp_path: Path):
     labels_path = tmp_path / "labels.jsonl"
     labels_path.write_text(
-        json.dumps({"clip_id": "clip-1", "adjudicated_label": "high_value"}) + "\n",
+        json.dumps({"clip_id": "clip-1", "binary_label": 1}) + "\n",
         encoding="utf-8",
     )
     labels = load_evaluation_labels(labels_path)
     assert labels[0]["clip_id"] == "clip-1"
-    assert labels[0]["adjudicated_label"] == "high_value"
+    assert labels[0]["binary_label"] == 1

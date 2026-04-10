@@ -19,7 +19,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate clip ranking and model-health metrics.")
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--run-dir", required=True)
-    parser.add_argument("--scores", default=None)
     parser.add_argument("--set", action="append", default=[], help="Inline JSON overrides for top-level config keys.")
     args = parser.parse_args()
 
@@ -27,7 +26,7 @@ def main() -> None:
     for override_json in args.set:
         config = deep_merge(config, json.loads(override_json))
     run_dir = Path(args.run_dir)
-    evaluation = evaluate_stage(config, run_dir, scores_path=args.scores)
+    evaluation = evaluate_stage(config, run_dir)
     write_root_summary(run_dir, None, None, evaluation)
 
 

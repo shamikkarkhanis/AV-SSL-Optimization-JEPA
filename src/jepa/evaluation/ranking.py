@@ -8,7 +8,11 @@ import numpy as np
 from sklearn.metrics import auc, average_precision_score, ndcg_score, precision_recall_curve
 
 
-def _label_to_binary(label: str | None, include_medium_as_positive: bool = True) -> int:
+def _label_to_binary(label: Any, include_medium_as_positive: bool = True) -> int:
+    if isinstance(label, (bool, np.bool_)):
+        return int(label)
+    if isinstance(label, (int, float, np.integer, np.floating)):
+        return int(label > 0)
     if label == "high_value":
         return 1
     if include_medium_as_positive and label == "medium_value":
@@ -20,7 +24,7 @@ def join_scores_and_labels(
     scores: Iterable[Dict[str, Any]],
     labels: Iterable[Dict[str, Any]],
     score_key: str = "review_value_score",
-    label_key: str = "adjudicated_label",
+    label_key: str = "binary_label",
 ) -> List[Dict[str, Any]]:
     score_map = {str(row["clip_id"]): row for row in scores}
     joined: List[Dict[str, Any]] = []
@@ -28,7 +32,21 @@ def join_scores_and_labels(
         clip_id = str(label["clip_id"])
         if clip_id not in score_map:
             continue
-        joined.append({**score_map[clip_id], **label, "score": float(score_map[clip_id][score_key]), "label": label.get(label_key) or label.get("review_value")})
+        primary_label = label.get(label_key)
+        if primary_label is None:
+            primary_label = label.get("binary_label")
+        if primary_label is None:
+            primary_label = label.get("adjudicated_label")
+        if primary_label is None:
+            primary_label = label.get("review_value")
+        joined.append(
+            {
+                **score_map[clip_id],
+                **label,
+                "score": float(score_map[clip_id][score_key]),
+                "label": primary_label,
+            }
+        )
     return joined
 
 
@@ -76,10 +94,16 @@ def compute_ranking_metrics(
         [_label_to_binary(row.get("label"), include_medium_as_positive) for row in joined_rows],
         dtype=np.int32,
     )
-    graded = np.asarray(
-        [graded_mapping.get(str(row.get("label")), 0.0) for row in joined_rows],
-        dtype=np.float64,
-    )
+    graded_values = []
+    for row in joined_rows:
+        label = row.get("label")
+        if isinstance(label, (bool, np.bool_)):
+            graded_values.append(float(int(label)))
+        elif isinstance(label, (int, float, np.integer, np.floating)):
+            graded_values.append(float(label))
+        else:
+            graded_values.append(float(graded_mapping.get(str(label), 0.0)))
+    graded = np.asarray(graded_values, dtype=np.float64)
 
     if binary.sum() == 0:
         average_precision = 0.0
@@ -89,7 +113,11 @@ def compute_ranking_metrics(
         precision, recall, _ = precision_recall_curve(binary, scores)
         pr_auc = float(auc(recall, precision))
 
-    ndcg = float(ndcg_score(graded.reshape(1, -1), scores.reshape(1, -1))) if np.any(graded > 0) else 0.0
+    ndcg = (
+        float(ndcg_score(graded.reshape(1, -1), scores.reshape(1, -1)))
+        if np.any(graded > 0) and len(joined_rows) > 1
+        else 0.0
+    )
 
     precision_at_k = {}
     recall_at_k = {}

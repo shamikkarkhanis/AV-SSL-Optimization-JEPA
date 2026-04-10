@@ -41,10 +41,12 @@ def _legacy_to_v1(raw: Dict[str, Any]) -> Dict[str, Any]:
             "mask_ratio": data.get("mask_ratio", 0.75),
             "training_manifest": data.get("manifest_path"),
             "training_split": "train",
+            "validation_manifest": data.get("manifest_path"),
+            "validation_split": "val",
             "scoring_manifest": data.get("manifest_path"),
             "scoring_split": "val",
             "evaluation_manifest": data.get("manifest_path"),
-            "evaluation_split": "val",
+            "evaluation_split": "test",
             "evaluation_labels": None,
         },
         "model": {
@@ -74,7 +76,7 @@ def _legacy_to_v1(raw: Dict[str, Any]) -> Dict[str, Any]:
         },
         "evaluation": {
             "k_values": [10, 50, 100],
-            "primary_label_field": "adjudicated_label",
+            "primary_label_field": "binary_label",
             "positive_labels": ["high_value"],
             "include_medium_as_positive": True,
             "graded_labels": {"low_value": 0.0, "medium_value": 1.0, "high_value": 2.0},
@@ -125,6 +127,11 @@ def apply_runtime_profile(config: Dict[str, Any]) -> Dict[str, Any]:
 def resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
     resolved = apply_runtime_profile(config)
     runtime = resolved.setdefault("runtime", {})
+    dataset = resolved.setdefault("dataset", {})
+    dataset.setdefault("validation_manifest", dataset.get("evaluation_manifest"))
+    dataset.setdefault("validation_split", dataset.get("evaluation_split", "val"))
+    dataset.setdefault("evaluation_manifest", dataset.get("scoring_manifest"))
+    dataset.setdefault("evaluation_split", dataset.get("scoring_split", "val"))
     batch_overrides = runtime.setdefault("batch_size_overrides", {})
     batch_overrides.setdefault("train", 1)
     batch_overrides.setdefault("score", 1)

@@ -147,8 +147,8 @@ Important controls:
 - `model.init_mode`: `pretrained`, `resume`, `scratch`
 - `model.encoder_mode`: `frozen`, `finetune`
 - `runtime.profile`: `cpu`, `gpu`, `ddp`
-- `dataset.training_manifest`, `dataset.scoring_manifest`, `dataset.evaluation_manifest`
-- `dataset.training_split`, `dataset.scoring_split`, `dataset.evaluation_split`
+- `dataset.training_manifest`, `dataset.validation_manifest`, `dataset.scoring_manifest`, `dataset.evaluation_manifest`
+- `dataset.training_split`, `dataset.validation_split`, `dataset.scoring_split`, `dataset.evaluation_split`
 - `dataset.evaluation_labels`
 
 Inline overrides are supported with `--set` as JSON:
@@ -176,8 +176,7 @@ Score only:
 ```bash
 uv run python score.py \
   --config configs/default.yaml \
-  --run-dir experiments/runs/baseline \
-  --checkpoint experiments/runs/baseline/training/checkpoints/best_model.pt
+  --run-dir experiments/runs/baseline
 ```
 
 Evaluate only:
@@ -185,9 +184,22 @@ Evaluate only:
 ```bash
 uv run python evaluate.py \
   --config configs/default.yaml \
-  --run-dir experiments/runs/baseline \
-  --scores experiments/runs/baseline/scoring/scores.jsonl
+  --run-dir experiments/runs/baseline
 ```
+
+## Label Review
+
+For manual binary labeling of an evaluation-labels JSONL, use the local review app:
+
+```bash
+uv run python scripts/review_labels.py \
+  --labels-path data/manifests/baseline_manifest_evaluation_labels.jsonl \
+  --manifest-path data/manifests/baseline_manifest.py \
+  --data-root data/raw/file
+```
+
+Then open `http://127.0.0.1:8765` in a browser. The app saves label edits back into the JSONL in place. Keys: `1` positive, `0` negative, `u` clear, `j` next, `k` previous.
+It renders each clip as an in-browser looping animation and also shows sampled still frames underneath.
 
 Full experiment:
 

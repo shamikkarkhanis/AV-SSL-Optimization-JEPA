@@ -39,3 +39,29 @@ def test_build_manifest_from_scene_camera_layout(tmp_path: Path):
     assert len(rows[0]["frame_paths"]) == 4
     assert rows[0]["frame_paths"][0].startswith("scene_")
     assert rows[0]["split"] in {"train", "val", "test"}
+
+
+def test_build_manifest_from_frames_writes_eval_labels_for_val_and_test(tmp_path: Path):
+    root = tmp_path / "frames"
+    for scene in ("scene_a", "scene_b", "scene_c"):
+        camera_dir = root / scene / "CAM_FRONT"
+        camera_dir.mkdir(parents=True)
+        for idx in range(4):
+            (camera_dir / f"{idx:06d}.jpg").write_bytes(b"frame")
+
+    output = tmp_path / "manifest.jsonl"
+    build_manifest_from_frames(
+        frames_root=root,
+        output_path=output,
+        clip_length=4,
+        stride=4,
+        train_ratio=1 / 3,
+        val_ratio=1 / 3,
+        seed=1,
+    )
+
+    labels_path = tmp_path / "manifest_evaluation_labels.jsonl"
+    rows = [json.loads(line) for line in labels_path.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 2
+    assert {row["split"] for row in rows} == {"val", "test"}
+    assert all("binary_label" in row for row in rows)

@@ -58,6 +58,9 @@ inference:
 
     resolved = load_and_resolve_config(config_path)
     assert resolved["dataset"]["training_manifest"] == "data/manifests/clips_manifest.jsonl"
+    assert resolved["dataset"]["validation_manifest"] == "data/manifests/clips_manifest.jsonl"
+    assert resolved["dataset"]["validation_split"] == "val"
+    assert resolved["dataset"]["evaluation_manifest"] == "data/manifests/clips_manifest.jsonl"
     assert resolved["runtime"]["batch_size_overrides"]["train"] == 3
     assert resolved["runtime"]["batch_size_overrides"]["score"] == 6
     assert resolved["runtime"]["batch_size_overrides"]["evaluation"] == 5

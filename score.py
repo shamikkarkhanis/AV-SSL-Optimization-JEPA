@@ -19,7 +19,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Score clips from a checkpoint.")
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--run-dir", required=True)
-    parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--set", action="append", default=[], help="Inline JSON overrides for top-level config keys.")
     args = parser.parse_args()
 
@@ -27,7 +26,7 @@ def main() -> None:
     for override_json in args.set:
         config = deep_merge(config, json.loads(override_json))
     run_dir = Path(args.run_dir)
-    scoring = score_stage(config, run_dir, checkpoint_path=args.checkpoint)
+    scoring = score_stage(config, run_dir)
     write_root_summary(run_dir, None, scoring, None)
 
 

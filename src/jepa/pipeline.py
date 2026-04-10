@@ -19,12 +19,11 @@ import yaml
 from torch.utils.data import DataLoader
 
 from jepa.config import resolve_config
-from jepa.data import MaskTubelet, TubeletDataset, load_evaluation_labels
+from jepa.data import MaskTubelet, TubeletDataset, load_clip_manifest, load_evaluation_labels
 from jepa.evaluation import compute_energy_joules, distribution_stats
 from jepa.evaluation.ranking import compute_ranking_metrics, join_scores_and_labels
 from jepa.models import JEPAModel
 from jepa.training import Trainer
-
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,9 @@ def _dataset_transform(config: Dict[str, Any]) -> MaskTubelet:
     )
 
 
-def _build_loader(dataset, batch_size: int, shuffle: bool, num_workers: int, device: torch.device) -> DataLoader:
+def _build_loader(
+    dataset, batch_size: int, shuffle: bool, num_workers: int, device: torch.device
+) -> DataLoader:
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -85,11 +86,13 @@ def _build_stage_dataset(config: Dict[str, Any], stage: str) -> TubeletDataset:
     dataset_cfg = config["dataset"]
     manifest_key = {
         "train": "training_manifest",
+        "validation": "validation_manifest",
         "score": "scoring_manifest",
         "evaluation": "evaluation_manifest",
     }[stage]
     split_key = {
         "train": "training_split",
+        "validation": "validation_split",
         "score": "scoring_split",
         "evaluation": "evaluation_split",
     }[stage]
@@ -107,8 +110,11 @@ def _build_model(config: Dict[str, Any]) -> JEPAModel:
     model_cfg = config["model"]
     predictor_cfg = model_cfg.get("predictor", {})
     return JEPAModel(
-        encoder_name=model_cfg.get("pretrained_name_or_path") or model_cfg["encoder_name"],
-        predictor_hidden=int(predictor_cfg.get("hidden_dim", model_cfg.get("embedding_dim", 1024))),
+        encoder_name=model_cfg.get("pretrained_name_or_path")
+        or model_cfg["encoder_name"],
+        predictor_hidden=int(
+            predictor_cfg.get("hidden_dim", model_cfg.get("embedding_dim", 1024))
+        ),
         predictor_dropout=float(predictor_cfg.get("dropout", 0.1)),
         freeze_encoder=model_cfg.get("encoder_mode", "frozen") == "frozen",
         encoder_init_mode=model_cfg.get("init_mode", "pretrained"),
@@ -137,7 +143,17 @@ def _amp_context(runtime_cfg: Dict[str, Any], device: torch.device):
 
 def _effective_batch_size(config: Dict[str, Any], stage: str) -> int:
     runtime_cfg = config["runtime"]
-    return int(runtime_cfg["batch_size_overrides"][stage]) * int(runtime_cfg.get("grad_accum_steps", 1))
+    return int(runtime_cfg["batch_size_overrides"][stage]) * int(
+        runtime_cfg.get("grad_accum_steps", 1)
+    )
+
+
+def _checkpoint_artifact_path(run_dir: Path) -> Path:
+    return run_dir / "training" / "checkpoints" / "best_model.pt"
+
+
+def _scores_artifact_path(run_dir: Path) -> Path:
+    return run_dir / "scoring" / "scores.jsonl"
 
 
 def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
@@ -159,7 +175,7 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
         num_workers=int(runtime_cfg.get("num_workers", 0)),
         device=device,
     )
-    val_dataset = _build_stage_dataset(config, "evaluation")
+    val_dataset = _build_stage_dataset(config, "validation")
     val_loader = _build_loader(
         val_dataset,
         batch_size=int(runtime_cfg["batch_size_overrides"]["evaluation"]),
@@ -180,7 +196,9 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
     resume_checkpoint = config["model"].get("resume_checkpoint")
     if config["model"].get("init_mode") == "resume":
         if not resume_checkpoint:
-            raise ValueError("model.resume_checkpoint is required for init_mode=resume.")
+            raise ValueError(
+                "model.resume_checkpoint is required for init_mode=resume."
+            )
         checkpoint = torch.load(resume_checkpoint, map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
         if checkpoint.get("optimizer_state_dict"):
@@ -222,7 +240,7 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
         )
 
     total_train_time = time.perf_counter() - overall_start
-    checkpoint_path = run_dir / "training" / "checkpoints" / "best_model.pt"
+    checkpoint_path = _checkpoint_artifact_path(run_dir)
     target_metric = train_cfg.get("target_metric")
     convergence_epoch = None
     if target_metric is not None:
@@ -253,7 +271,9 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
     return summary
 
 
-def score_stage(config: Dict[str, Any], run_dir: Path, checkpoint_path: Optional[str] = None) -> Dict[str, Any]:
+def score_stage(
+    config: Dict[str, Any], run_dir: Path
+) -> Dict[str, Any]:
     config = resolve_config(config)
     _ensure_run_layout(run_dir, config)
 
@@ -262,7 +282,7 @@ def score_stage(config: Dict[str, Any], run_dir: Path, checkpoint_path: Optional
     if runtime_cfg.get("cpu_threads"):
         torch.set_num_threads(int(runtime_cfg["cpu_threads"]))
 
-    checkpoint_path = checkpoint_path or str(run_dir / "training" / "checkpoints" / "best_model.pt")
+    checkpoint_path = _checkpoint_artifact_path(run_dir)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model = _build_model(config)
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -301,13 +321,23 @@ def score_stage(config: Dict[str, Any], run_dir: Path, checkpoint_path: Optional
             clean_np = clean_emb.float().cpu().numpy()
             pred_np = pred_emb.float().cpu().numpy()
             novelty = 1.0 - np.sum(
-                (pred_np / np.maximum(np.linalg.norm(pred_np, axis=1, keepdims=True), 1e-12))
-                * (clean_np / np.maximum(np.linalg.norm(clean_np, axis=1, keepdims=True), 1e-12)),
+                (
+                    pred_np
+                    / np.maximum(np.linalg.norm(pred_np, axis=1, keepdims=True), 1e-12)
+                )
+                * (
+                    clean_np
+                    / np.maximum(np.linalg.norm(clean_np, axis=1, keepdims=True), 1e-12)
+                ),
                 axis=1,
             )
 
-            pred_norm = pred_np / np.maximum(np.linalg.norm(pred_np, axis=1, keepdims=True), 1e-12)
-            clean_norm = clean_np / np.maximum(np.linalg.norm(clean_np, axis=1, keepdims=True), 1e-12)
+            pred_norm = pred_np / np.maximum(
+                np.linalg.norm(pred_np, axis=1, keepdims=True), 1e-12
+            )
+            clean_norm = clean_np / np.maximum(
+                np.linalg.norm(clean_np, axis=1, keepdims=True), 1e-12
+            )
             cosine = np.sum(pred_norm * clean_norm, axis=1)
 
             for idx, clip_id in enumerate(clip_ids):
@@ -340,24 +370,34 @@ def score_stage(config: Dict[str, Any], run_dir: Path, checkpoint_path: Optional
         score_rows.append(row)
 
     score_rows.sort(key=lambda row: row["review_value_score"], reverse=True)
-    scores_path = run_dir / "scoring" / "scores.jsonl"
+    scores_path = _scores_artifact_path(run_dir)
     with open(scores_path, "w", encoding="utf-8") as handle:
         for row in score_rows:
             handle.write(json.dumps(row) + "\n")
 
     total_seconds = time.perf_counter() - overall_start
     summary = {
-        "checkpoint_path": checkpoint_path,
+        "checkpoint_path": str(checkpoint_path),
         "scores_path": str(scores_path),
         "num_clips": len(score_rows),
         "runtime_profile": runtime_cfg.get("profile"),
         "device": str(device),
-        "clips_per_second": len(score_rows) / total_seconds if total_seconds > 0 else 0.0,
+        "clips_per_second": len(score_rows) / total_seconds
+        if total_seconds > 0
+        else 0.0,
         "latency_ms": distribution_stats(batch_latencies_ms),
         "memory_peak_mb": _peak_memory_mb(),
-        "estimated_energy_joules": compute_energy_joules(sum(batch_latencies_ms), float(score_cfg.get("power_watts", 75.0))),
-        "score_distribution": distribution_stats([row["review_value_score"] for row in score_rows]),
-        "mean_cosine_similarity": float(np.mean([row["mean_cosine_similarity"] for row in score_rows])) if score_rows else 0.0,
+        "estimated_energy_joules": compute_energy_joules(
+            sum(batch_latencies_ms), float(score_cfg.get("power_watts", 75.0))
+        ),
+        "score_distribution": distribution_stats(
+            [row["review_value_score"] for row in score_rows]
+        ),
+        "mean_cosine_similarity": float(
+            np.mean([row["mean_cosine_similarity"] for row in score_rows])
+        )
+        if score_rows
+        else 0.0,
     }
     with open(run_dir / "scoring" / "summary.json", "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)
@@ -369,7 +409,25 @@ def _load_score_rows(scores_path: Path) -> List[Dict[str, Any]]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-def evaluate_stage(config: Dict[str, Any], run_dir: Path, scores_path: Optional[str] = None) -> Dict[str, Any]:
+def _restrict_scores_to_evaluation_split(
+    config: Dict[str, Any],
+    score_rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    dataset_cfg = config["dataset"]
+    manifest_path = dataset_cfg.get("evaluation_manifest")
+    split = dataset_cfg.get("evaluation_split")
+    if not manifest_path:
+        return score_rows
+
+    manifest_records = load_clip_manifest(manifest_path, split=split)
+    allowed_clip_ids = {str(record["clip_id"]) for record in manifest_records}
+    filtered = [row for row in score_rows if str(row.get("clip_id")) in allowed_clip_ids]
+    return filtered
+
+
+def evaluate_stage(
+    config: Dict[str, Any], run_dir: Path
+) -> Dict[str, Any]:
     config = resolve_config(config)
     _ensure_run_layout(run_dir, config)
     evaluation_cfg = config["evaluation"]
@@ -377,24 +435,37 @@ def evaluate_stage(config: Dict[str, Any], run_dir: Path, scores_path: Optional[
     if not labels_path:
         raise ValueError("dataset.evaluation_labels is required for evaluation.")
 
-    scores_path = scores_path or str(run_dir / "scoring" / "scores.jsonl")
-    score_rows = _load_score_rows(Path(scores_path))
+    scores_path = _scores_artifact_path(run_dir)
+    if scores_path.resolve() == Path(labels_path).resolve():
+        raise ValueError("scores_path and dataset.evaluation_labels must point to different files.")
+    score_rows = _restrict_scores_to_evaluation_split(
+        config,
+        _load_score_rows(scores_path),
+    )
+    if not score_rows:
+        raise ValueError("No scored clips matched dataset.evaluation_manifest and dataset.evaluation_split.")
     labels = load_evaluation_labels(labels_path)
     joined = join_scores_and_labels(
         score_rows,
         labels,
         score_key="review_value_score",
-        label_key=evaluation_cfg.get("primary_label_field", "adjudicated_label"),
+        label_key=evaluation_cfg.get("primary_label_field", "binary_label"),
     )
     ranking = compute_ranking_metrics(
         joined,
         k_values=list(evaluation_cfg.get("k_values", [10, 50, 100])),
-        include_medium_as_positive=bool(evaluation_cfg.get("include_medium_as_positive", True)),
+        include_medium_as_positive=bool(
+            evaluation_cfg.get("include_medium_as_positive", True)
+        ),
         graded_mapping=dict(evaluation_cfg.get("graded_labels", {})),
     )
-    mean_cosine_similarity = float(np.mean([row.get("mean_cosine_similarity", 0.0) for row in joined])) if joined else 0.0
+    mean_cosine_similarity = (
+        float(np.mean([row.get("mean_cosine_similarity", 0.0) for row in joined]))
+        if joined
+        else 0.0
+    )
     results = {
-        "scores_path": scores_path,
+        "scores_path": str(scores_path),
         "labels_path": labels_path,
         "ranking_metrics": ranking,
         "model_health": {
@@ -406,7 +477,12 @@ def evaluate_stage(config: Dict[str, Any], run_dir: Path, scores_path: Optional[
     return results
 
 
-def write_root_summary(run_dir: Path, training: Optional[Dict[str, Any]], scoring: Optional[Dict[str, Any]], evaluation: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def write_root_summary(
+    run_dir: Path,
+    training: Optional[Dict[str, Any]],
+    scoring: Optional[Dict[str, Any]],
+    evaluation: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
     summary = {
         "run_dir": str(run_dir),
         "artifacts": {
@@ -426,6 +502,6 @@ def write_root_summary(run_dir: Path, training: Optional[Dict[str, Any]], scorin
 
 def run_experiment(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
     training = train_stage(config, run_dir)
-    scoring = score_stage(config, run_dir, checkpoint_path=training["checkpoint_path"])
-    evaluation = evaluate_stage(config, run_dir, scores_path=scoring["scores_path"])
+    scoring = score_stage(config, run_dir)
+    evaluation = evaluate_stage(config, run_dir)
     return write_root_summary(run_dir, training, scoring, evaluation)

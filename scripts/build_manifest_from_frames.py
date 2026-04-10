@@ -6,7 +6,7 @@ import argparse
 import json
 import random
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 VALID_EXTENSIONS = {".jpg", ".jpeg", ".png"}
@@ -43,6 +43,38 @@ def _assign_scene_splits(
         else:
             split_map[scene_id] = "test"
     return split_map
+
+
+def _default_eval_labels_path(output_path: str | Path) -> Path:
+    out_path = Path(output_path)
+    return out_path.with_name(f"{out_path.stem}_evaluation_labels.jsonl")
+
+
+def _write_evaluation_labels_template(
+    records: Sequence[Dict[str, object]],
+    output_path: Path,
+    include_splits: Tuple[str, ...] = ("val", "test"),
+) -> int:
+    rows = []
+    for record in records:
+        split = str(record["split"])
+        if split not in include_splits:
+            continue
+        rows.append(
+            {
+                "clip_id": str(record["clip_id"]),
+                "split": split,
+                "scene_id": str(record["scene_id"]),
+                "camera": str(record["camera"]),
+                "binary_label": None,
+            }
+        )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+    return len(rows)
 
 
 def _window_records(
@@ -91,6 +123,8 @@ def build_manifest_from_frames(
     seed: int = 42,
     relative_paths: bool = True,
     camera_filter: str | None = None,
+    evaluation_labels_output: Optional[str | Path] = None,
+    evaluation_label_splits: Tuple[str, ...] = ("val", "test"),
 ) -> int:
     root = Path(frames_root)
     output = Path(output_path)
@@ -131,6 +165,18 @@ def build_manifest_from_frames(
     with output.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record) + "\n")
+
+    eval_labels_path = (
+        Path(evaluation_labels_output)
+        if evaluation_labels_output
+        else _default_eval_labels_path(output_path)
+    )
+    num_eval_rows = _write_evaluation_labels_template(
+        records,
+        eval_labels_path,
+        include_splits=evaluation_label_splits,
+    )
+    print(f"Wrote {num_eval_rows} evaluation label rows to {eval_labels_path}")
     return len(records)
 
 
@@ -145,6 +191,11 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42, help="Deterministic split seed.")
     parser.add_argument("--camera", default=None, help="Optional camera directory to include.")
     parser.add_argument("--absolute", action="store_true", help="Write absolute frame paths instead of paths relative to frames-root.")
+    parser.add_argument(
+        "--evaluation-labels-output",
+        default=None,
+        help="Optional output JSONL path for binary evaluation labels template. Defaults next to the manifest.",
+    )
     args = parser.parse_args()
 
     count = build_manifest_from_frames(
@@ -157,6 +208,7 @@ def main() -> None:
         seed=args.seed,
         relative_paths=not args.absolute,
         camera_filter=args.camera,
+        evaluation_labels_output=args.evaluation_labels_output,
     )
     print(f"Wrote {count} clips to {args.output}")
 
