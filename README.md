@@ -59,6 +59,8 @@ run_experiment.py
 
 ## Installation
 
+Use Python 3.10-3.12 for this project. Python 3.13+ is not supported by the pinned PyTorch stack, and older Linux clusters commonly require the `manylinux2014` wheels provided by the 2.5.x line.
+
 ```bash
 uv sync
 ```

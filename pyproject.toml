@@ -3,15 +3,15 @@ name = "jepa"
 version = "0.1.0"
 description = "JEPA-based clip mining for autonomous driving"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 authors = [
     { name = "Research Team" }
 ]
 
 dependencies = [
     # Core Deep Learning
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
+    "torch==2.5.1",
+    "torchvision==0.20.1",
     "transformers>=4.30.0",
     
     # Scientific Computing
