@@ -26,10 +26,26 @@ def join_scores_and_labels(
     score_key: str = "review_value_score",
     label_key: str = "binary_label",
 ) -> List[Dict[str, Any]]:
-    score_map = {str(row["clip_id"]): row for row in scores}
+    score_map: Dict[str, Dict[str, Any]] = {}
+    duplicate_score_ids = set()
+    for row in scores:
+        clip_id = str(row["clip_id"])
+        if clip_id in score_map:
+            duplicate_score_ids.add(clip_id)
+        score_map[clip_id] = row
+    if duplicate_score_ids:
+        duplicate_ids = ", ".join(sorted(duplicate_score_ids))
+        raise ValueError(f"Duplicate score rows found for clip_id(s): {duplicate_ids}")
+
     joined: List[Dict[str, Any]] = []
+    seen_label_ids = set()
+    duplicate_label_ids = set()
     for label in labels:
         clip_id = str(label["clip_id"])
+        if clip_id in seen_label_ids:
+            duplicate_label_ids.add(clip_id)
+            continue
+        seen_label_ids.add(clip_id)
         if clip_id not in score_map:
             continue
         primary_label = label.get(label_key)
@@ -47,6 +63,9 @@ def join_scores_and_labels(
                 "label": primary_label,
             }
         )
+    if duplicate_label_ids:
+        duplicate_ids = ", ".join(sorted(duplicate_label_ids))
+        raise ValueError(f"Duplicate label rows found for clip_id(s): {duplicate_ids}")
     return joined
 
 
@@ -80,14 +99,7 @@ def compute_ranking_metrics(
         "high_value": 2.0,
     }
     if not joined_rows:
-        return {
-            "num_joined_clips": 0,
-            "average_precision": 0.0,
-            "pr_auc": 0.0,
-            "ndcg": 0.0,
-            "precision_at_k": {},
-            "recall_at_k": {},
-        }
+        raise ValueError("Cannot compute ranking metrics with zero joined score/label rows.")
 
     scores = np.asarray([row["score"] for row in joined_rows], dtype=np.float64)
     binary = np.asarray(

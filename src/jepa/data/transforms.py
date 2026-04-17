@@ -1,5 +1,5 @@
 """Transforms for JEPA Training - Masking Logic"""
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -33,15 +33,14 @@ class MaskTubelet:
         patch_size: int = 16,
         fill_value: int = 0,
         seed: Optional[int] = None,
+        frame_processor: Optional[Callable[[List[Image.Image]], torch.Tensor]] = None,
     ):
         self.mask_ratio = mask_ratio
         self.patch_size = patch_size
         self.fill_value = fill_value
         self.seed = seed
+        self.frame_processor = frame_processor
         self._call_count = 0
-        
-        # PIL to tensor transform
-        self.to_tensor = T.ToTensor()
 
     def _next_seed(self) -> Optional[int]:
         """Derive a deterministic but changing seed for each sample call.
@@ -80,9 +79,17 @@ class MaskTubelet:
             fill_value=self.fill_value,
         )
         
-        # Convert to tensors (T, C, H, W)
-        clean_tensor = torch.from_numpy(tubelet).permute(0, 3, 1, 2).float() / 255.0
-        masked_tensor = torch.from_numpy(masked_tubelet).permute(0, 3, 1, 2).float() / 255.0
+        # Apply encoder preprocessing when configured so frozen backbones
+        # are not fed raw resized tensors at train/eval time.
+        if self.frame_processor is not None:
+            masked_frames = [Image.fromarray(frame) for frame in masked_tubelet]
+            clean_tensor = self.frame_processor(frames)
+            masked_tensor = self.frame_processor(masked_frames)
+        else:
+            clean_tensor = torch.from_numpy(tubelet).permute(0, 3, 1, 2).float() / 255.0
+            masked_tensor = (
+                torch.from_numpy(masked_tubelet).permute(0, 3, 1, 2).float() / 255.0
+            )
         mask_tensor = torch.from_numpy(mask)
         
         # Calculate actual mask fraction
@@ -182,9 +189,11 @@ class VideoProcessor:
     def __init__(
         self,
         size: int = 224,
-        mean: List[float] = [0.485, 0.456, 0.406],  # ImageNet stats
-        std: List[float] = [0.229, 0.224, 0.225],
+        mean: Optional[List[float]] = None,
+        std: Optional[List[float]] = None,
     ):
+        mean = mean or [0.485, 0.456, 0.406]
+        std = std or [0.229, 0.224, 0.225]
         self.transform = T.Compose([
             T.Resize((size, size)),
             T.ToTensor(),

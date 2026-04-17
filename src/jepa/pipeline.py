@@ -19,7 +19,13 @@ import yaml
 from torch.utils.data import DataLoader
 
 from jepa.config import resolve_config
-from jepa.data import MaskTubelet, TubeletDataset, load_clip_manifest, load_evaluation_labels
+from jepa.data import (
+    MaskTubelet,
+    TubeletDataset,
+    VideoProcessor,
+    load_clip_manifest,
+    load_evaluation_labels,
+)
 from jepa.evaluation import compute_energy_joules, distribution_stats
 from jepa.evaluation.ranking import compute_ranking_metrics, join_scores_and_labels
 from jepa.models import JEPAModel
@@ -67,6 +73,7 @@ def _dataset_transform(config: Dict[str, Any]) -> MaskTubelet:
         mask_ratio=float(dataset_cfg["mask_ratio"]),
         patch_size=int(dataset_cfg["patch_size"]),
         seed=int(config.get("seed", 42)),
+        frame_processor=VideoProcessor(size=int(dataset_cfg.get("image_size", 224))),
     )
 
 
@@ -303,20 +310,35 @@ def score_stage(
     clip_meta: Dict[str, Dict[str, Any]] = {}
     batch_latencies_ms: List[float] = []
     score_cfg = config["score"]
-    overall_start = time.perf_counter()
+    warmup_batches = max(int(score_cfg.get("warmup_batches", 0)), 0)
+    timed_start: Optional[float] = None
+    timed_clip_count = 0
+
+    aggregation = score_cfg.get("aggregation", "mean")
+    if aggregation not in {"mean", "max"}:
+        raise ValueError(
+            f"Unsupported score.aggregation={aggregation!r}. Expected 'mean' or 'max'."
+        )
 
     with torch.inference_mode():
-        for batch in loader:
+        for batch_idx, batch in enumerate(loader):
             clip_ids = batch["meta"]["clip_id"]
             masked = batch["masked_frames"].to(device)
             clean = batch["clean_frames"].to(device)
             mask_frac = batch["mask_frac"].to(device)
+
+            is_warmup = batch_idx < warmup_batches
+            if not is_warmup and timed_start is None:
+                timed_start = time.perf_counter()
+
             start = time.perf_counter()
             with _amp_context(runtime_cfg, device):
                 clean_emb, pred_emb = model(clean, masked, mask_frac)
             elapsed_ms = (time.perf_counter() - start) * 1000.0
-            per_sample_latency = elapsed_ms / max(len(clip_ids), 1)
-            batch_latencies_ms.extend([per_sample_latency] * len(clip_ids))
+            if not is_warmup:
+                per_sample_latency = elapsed_ms / max(len(clip_ids), 1)
+                batch_latencies_ms.extend([per_sample_latency] * len(clip_ids))
+                timed_clip_count += len(clip_ids)
 
             clean_np = clean_emb.float().cpu().numpy()
             pred_np = pred_emb.float().cpu().numpy()
@@ -352,7 +374,6 @@ def score_stage(
                         "split": batch["meta"]["split"][idx],
                     }
 
-    aggregation = score_cfg.get("aggregation", "mean")
     score_rows = []
     for clip_id, values in clip_scores.items():
         if aggregation == "max":
@@ -375,21 +396,25 @@ def score_stage(
         for row in score_rows:
             handle.write(json.dumps(row) + "\n")
 
-    total_seconds = time.perf_counter() - overall_start
+    total_seconds = 0.0 if timed_start is None else time.perf_counter() - timed_start
     summary = {
         "checkpoint_path": str(checkpoint_path),
         "scores_path": str(scores_path),
         "num_clips": len(score_rows),
         "runtime_profile": runtime_cfg.get("profile"),
         "device": str(device),
-        "clips_per_second": len(score_rows) / total_seconds
+        "warmup_batches_skipped": warmup_batches,
+        "timed_clips": timed_clip_count,
+        "timed_window_seconds": total_seconds,
+        "clips_per_second": timed_clip_count / total_seconds
         if total_seconds > 0
         else 0.0,
         "latency_ms": distribution_stats(batch_latencies_ms),
         "memory_peak_mb": _peak_memory_mb(),
         "estimated_energy_joules": compute_energy_joules(
-            sum(batch_latencies_ms), float(score_cfg.get("power_watts", 75.0))
+            total_seconds * 1000.0, float(score_cfg.get("power_watts", 75.0))
         ),
+        "forward_pass_seconds": sum(batch_latencies_ms) / 1000.0,
         "score_distribution": distribution_stats(
             [row["review_value_score"] for row in score_rows]
         ),
@@ -451,6 +476,11 @@ def evaluate_stage(
         score_key="review_value_score",
         label_key=evaluation_cfg.get("primary_label_field", "binary_label"),
     )
+    if not joined:
+        raise ValueError(
+            "No evaluation rows remained after joining scores with labels. "
+            "Check clip_id alignment, evaluation split filtering, and label coverage."
+        )
     ranking = compute_ranking_metrics(
         joined,
         k_values=list(evaluation_cfg.get("k_values", [10, 50, 100])),

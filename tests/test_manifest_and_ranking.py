@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from jepa.data import derive_clip_id, load_clip_manifest, load_evaluation_labels
 from jepa.evaluation import compute_ranking_metrics, join_scores_and_labels
 
@@ -51,3 +53,30 @@ def test_load_evaluation_labels_jsonl(tmp_path: Path):
     labels = load_evaluation_labels(labels_path)
     assert labels[0]["clip_id"] == "clip-1"
     assert labels[0]["binary_label"] == 1
+
+
+def test_join_scores_and_labels_rejects_duplicate_labels():
+    scores = [{"clip_id": "a", "review_value_score": 0.9}]
+    labels = [
+        {"clip_id": "a", "binary_label": 1},
+        {"clip_id": "a", "binary_label": 0},
+    ]
+
+    with pytest.raises(ValueError, match="Duplicate label rows"):
+        join_scores_and_labels(scores, labels)
+
+
+def test_join_scores_and_labels_rejects_duplicate_scores():
+    scores = [
+        {"clip_id": "a", "review_value_score": 0.9},
+        {"clip_id": "a", "review_value_score": 0.8},
+    ]
+    labels = [{"clip_id": "a", "binary_label": 1}]
+
+    with pytest.raises(ValueError, match="Duplicate score rows"):
+        join_scores_and_labels(scores, labels)
+
+
+def test_compute_ranking_metrics_rejects_empty_join():
+    with pytest.raises(ValueError, match="zero joined"):
+        compute_ranking_metrics([])

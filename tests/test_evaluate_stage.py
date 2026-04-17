@@ -98,3 +98,45 @@ def test_evaluate_stage_filters_scores_to_configured_evaluation_split(tmp_path: 
     result = evaluate_stage(config, run_dir)
     assert result["ranking_metrics"]["num_joined_clips"] == 1
     assert result["ranking_metrics"]["positive_rate"] == 1.0
+
+
+def test_evaluate_stage_rejects_empty_score_label_join(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    (run_dir / "scoring").mkdir(parents=True)
+    (run_dir / "scoring" / "scores.jsonl").write_text(
+        json.dumps(
+            {
+                "clip_id": "score-only",
+                "split": "test",
+                "review_value_score": 0.2,
+                "mean_cosine_similarity": 0.3,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    labels = tmp_path / "labels.jsonl"
+    labels.write_text(
+        json.dumps({"clip_id": "label-only", "binary_label": 1}) + "\n",
+        encoding="utf-8",
+    )
+
+    config = {
+        "seed": 42,
+        "dataset": {
+            "evaluation_labels": str(labels),
+        },
+        "model": {},
+        "train": {},
+        "score": {},
+        "evaluation": {"primary_label_field": "binary_label", "k_values": [1]},
+        "runtime": {
+            "profile": "cpu",
+            "profiles": {"cpu": {"device": "cpu", "amp": "none", "num_workers": 0}},
+            "batch_size_overrides": {"train": 1, "score": 1, "evaluation": 1},
+        },
+        "experiment": {},
+    }
+
+    with pytest.raises(ValueError, match="No evaluation rows remained after joining"):
+        evaluate_stage(config, run_dir)

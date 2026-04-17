@@ -3,7 +3,7 @@ name = "jepa"
 version = "0.1.0"
 description = "JEPA-based clip mining for autonomous driving"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">3.11,<3.13"
 authors = [
     { name = "Research Team" }
 ]
@@ -13,26 +13,26 @@ dependencies = [
     "torch==2.5.1",
     "torchvision==0.20.1",
     "transformers>=4.30.0",
-    
+
     # Scientific Computing
-    "numpy>=1.24.0",
+    "numpy>=1.24.0,<2",
     "scikit-learn>=1.3.0",
     "matplotlib>=3.7.0",
-    
+
     # Image Processing
     "pillow>=10.0.0",
-    
+
     # HuggingFace Ecosystem
     "huggingface-hub>=0.20.0",
     "tokenizers>=0.15.0",
     "safetensors>=0.4.0",
-    
+
     # Utilities
     "tqdm>=4.65.0",
     "requests>=2.31.0",
     "pyyaml>=6.0",
     "psutil>=5.9.0",
-    
+
     # File System
     "fsspec>=2023.6.0",
     "filelock>=3.12.0",
