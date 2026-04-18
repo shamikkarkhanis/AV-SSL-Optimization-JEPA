@@ -1,34 +1,5 @@
 seed: 42
 
-dataset:
-  data_root: "data/raw/file"
-  frames_per_clip: 16
-  tubelet_size: 2
-  image_size: 224
-  patch_size: 16
-  mask_ratio: 0.75
-  training_manifest: "data/manifests/nuscenes_trainval_resplit.jsonl"
-  training_split: "train"
-  validation_manifest: "data/manifests/nuscenes_trainval_resplit.jsonl"
-  validation_split: "val"
-  scoring_manifest: "data/manifests/nuscenes_trainval_resplit.jsonl"
-  scoring_split: "val"
-  evaluation_manifest: "data/manifests/nuscenes_trainval_resplit.jsonl"
-  evaluation_split: "test"
-  evaluation_labels: "data/manifests/nuscenes_trainval_resplit_evaluation_labels.jsonl"
-
-model:
-  encoder_name: "facebook/vjepa2-vitl-fpc64-256"
-  embedding_dim: 1024
-  init_mode: "pretrained"
-  encoder_mode: "frozen"
-  pretrained_name_or_path: "facebook/vjepa2-vitl-fpc64-256"
-  resume_checkpoint: null
-  predictor:
-    hidden_dim: 1024
-    dropout: 0.1
-    activation: "gelu"
-
 train:
   epochs: 3
   optimizer: "adamw"
@@ -59,10 +30,10 @@ evaluation:
     - "validation_loss"
 
 runtime:
-  profile: "cpu"
+  profile: "gpu"
   device: "auto"
   amp: "auto"
-  num_workers: 0
+  num_workers: 8
   cpu_threads: null
   batch_size_overrides:
     train: 8

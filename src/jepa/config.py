@@ -139,6 +139,8 @@ def resolve_config(config: Dict[str, Any]) -> Dict[str, Any]:
     runtime.setdefault("grad_accum_steps", 1)
     runtime.setdefault("amp", "none")
     runtime.setdefault("num_workers", 0)
+    runtime.setdefault("persistent_workers", False)
+    runtime.setdefault("prefetch_factor", None)
     return resolved
 
 

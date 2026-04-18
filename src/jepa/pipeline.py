@@ -78,15 +78,26 @@ def _dataset_transform(config: Dict[str, Any]) -> MaskTubelet:
 
 
 def _build_loader(
-    dataset, batch_size: int, shuffle: bool, num_workers: int, device: torch.device
+    dataset,
+    batch_size: int,
+    shuffle: bool,
+    num_workers: int,
+    device: torch.device,
+    persistent_workers: bool = False,
+    prefetch_factor: Optional[int] = None,
 ) -> DataLoader:
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-    )
+    loader_kwargs = {
+        "dataset": dataset,
+        "batch_size": batch_size,
+        "shuffle": shuffle,
+        "num_workers": num_workers,
+        "pin_memory": device.type == "cuda",
+    }
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = persistent_workers
+        if prefetch_factor is not None:
+            loader_kwargs["prefetch_factor"] = prefetch_factor
+    return DataLoader(**loader_kwargs)
 
 
 def _build_stage_dataset(config: Dict[str, Any], stage: str) -> TubeletDataset:
@@ -181,6 +192,8 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
         shuffle=True,
         num_workers=int(runtime_cfg.get("num_workers", 0)),
         device=device,
+        persistent_workers=bool(runtime_cfg.get("persistent_workers", False)),
+        prefetch_factor=runtime_cfg.get("prefetch_factor"),
     )
     val_dataset = _build_stage_dataset(config, "validation")
     val_loader = _build_loader(
@@ -189,6 +202,8 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
         shuffle=False,
         num_workers=int(runtime_cfg.get("num_workers", 0)),
         device=device,
+        persistent_workers=bool(runtime_cfg.get("persistent_workers", False)),
+        prefetch_factor=runtime_cfg.get("prefetch_factor"),
     )
 
     model = _build_model(config).to(device)

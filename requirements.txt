@@ -5,7 +5,7 @@ transformers
 
 # Scientific Computing
 numpy<2
-scikit-learn
+scikit-learn<1.6
 matplotlib
 
 # Image Processing

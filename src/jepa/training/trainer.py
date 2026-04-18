@@ -72,10 +72,11 @@ class Trainer:
         self.optimizer.zero_grad()
         pbar = tqdm(loader, desc=f"Train Epoch {epoch}")
         for step_idx, batch in enumerate(pbar, start=1):
+            non_blocking = self.device.type == "cuda"
             # Move data to device
-            masked = batch["masked_frames"].to(self.device)
-            clean = batch["clean_frames"].to(self.device)
-            mask_frac = batch["mask_frac"].to(self.device)
+            masked = batch["masked_frames"].to(self.device, non_blocking=non_blocking)
+            clean = batch["clean_frames"].to(self.device, non_blocking=non_blocking)
+            mask_frac = batch["mask_frac"].to(self.device, non_blocking=non_blocking)
             
             # Forward pass
             # clean_emb: Target, pred_emb: Prediction
@@ -120,9 +121,10 @@ class Trainer:
         with torch.no_grad():
             pbar = tqdm(loader, desc=f"Val Epoch {epoch}")
             for batch in pbar:
-                masked = batch["masked_frames"].to(self.device)
-                clean = batch["clean_frames"].to(self.device)
-                mask_frac = batch["mask_frac"].to(self.device)
+                non_blocking = self.device.type == "cuda"
+                masked = batch["masked_frames"].to(self.device, non_blocking=non_blocking)
+                clean = batch["clean_frames"].to(self.device, non_blocking=non_blocking)
+                mask_frac = batch["mask_frac"].to(self.device, non_blocking=non_blocking)
                 
                 with self.amp_context_factory():
                     clean_emb, pred_emb = self.model(clean, masked, mask_frac)
