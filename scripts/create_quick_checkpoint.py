@@ -7,8 +7,8 @@ from pathlib import Path
 
 import torch
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+# Add repo src to the front of sys.path so local code wins over any installed package.
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from jepa.models import JEPAModel
 
