@@ -91,6 +91,11 @@ def main() -> None:
         help="Path to factorial design config YAML",
     )
     parser.add_argument(
+        "--run-dir",
+        default=None,
+        help="Optional batch run directory override. Individual runs will be created under <run-dir>/runs/.",
+    )
+    parser.add_argument(
         "--max-runs",
         type=int,
         default=None,
@@ -144,7 +149,11 @@ def main() -> None:
     now = datetime.now()
     day_bucket = now.strftime("%Y-%m-%d")
     batch_id = now.strftime("batch_%H%M%S")
-    batch_root = Path(experiments_root) / day_bucket / batch_id
+    batch_root = (
+        Path(args.run_dir)
+        if args.run_dir
+        else Path(experiments_root) / day_bucket / batch_id
+    )
     batch_root.mkdir(parents=True, exist_ok=True)
     design_matrix_path = batch_root / "design_matrix.jsonl"
     results_path = batch_root / "results.jsonl"
