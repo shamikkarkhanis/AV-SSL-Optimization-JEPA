@@ -1,0 +1,10 @@
+{"clip_id": "n008-2018-09-18-14-54-39-0400__CAM_FRONT__1537297613862404__1537297621362404", "split": "test", "scene_id": "n008-2018-09-18-14-54-39-0400", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n008-2018-09-18-14-54-39-0400__CAM_FRONT__1537297621862404__1537297629512404", "split": "test", "scene_id": "n008-2018-09-18-14-54-39-0400", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n008-2018-09-18-14-54-39-0400__CAM_FRONT__1537297653662404__1537297661012404", "split": "test", "scene_id": "n008-2018-09-18-14-54-39-0400", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n008-2018-09-18-14-54-39-0400__CAM_FRONT__1537297661512404__1537297669012404", "split": "test", "scene_id": "n008-2018-09-18-14-54-39-0400", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n008-2018-09-18-14-54-39-0400__CAM_FRONT__1537297805412404__1537297812912404", "split": "test", "scene_id": "n008-2018-09-18-14-54-39-0400", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n015-2018-09-25-11-10-38+0800__CAM_FRONT__1537845541162460__1537845548762460", "split": "test", "scene_id": "n015-2018-09-25-11-10-38+0800", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n015-2018-09-25-11-10-38+0800__CAM_FRONT__1537845620762460__1537845628112460", "split": "test", "scene_id": "n015-2018-09-25-11-10-38+0800", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n015-2018-09-25-13-17-43+0800__CAM_FRONT__1537852968612460__1537852975662567", "split": "test", "scene_id": "n015-2018-09-25-13-17-43+0800", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n015-2018-09-26-11-17-24+0800__CAM_FRONT__1537932274662460__1537932281762460", "split": "test", "scene_id": "n015-2018-09-26-11-17-24+0800", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "n015-2018-10-08-15-44-23+0800__CAM_FRONT__1538984917912460__1538984925512460", "split": "test", "scene_id": "n015-2018-10-08-15-44-23+0800", "camera": "CAM_FRONT", "binary_label": 1}

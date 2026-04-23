@@ -1,0 +1,9 @@
+{"clip_id": "bdd-0001542f-5ce3cf52__CAM_FRONT__0__15", "split": "test", "scene_id": "bdd-0001542f-5ce3cf52", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-0004974f-05e1c285__CAM_FRONT__0__15", "split": "test", "scene_id": "bdd-0004974f-05e1c285", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-0004974f-05e1c285__CAM_FRONT__16__31", "split": "test", "scene_id": "bdd-0004974f-05e1c285", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-0004974f-05e1c285__CAM_FRONT__32__47", "split": "test", "scene_id": "bdd-0004974f-05e1c285", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-0004974f-05e1c285__CAM_FRONT__48__63", "split": "test", "scene_id": "bdd-0004974f-05e1c285", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-00054602-3bf57337__CAM_FRONT__32__47", "split": "test", "scene_id": "bdd-00054602-3bf57337", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-00067cfb-5adfaaa7__CAM_FRONT__32__47", "split": "test", "scene_id": "bdd-00067cfb-5adfaaa7", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-00067cfb-caba8a02__CAM_FRONT__32__47", "split": "test", "scene_id": "bdd-00067cfb-caba8a02", "camera": "CAM_FRONT", "binary_label": 1}
+{"clip_id": "bdd-00067cfb-caba8a02__CAM_FRONT__48__63", "split": "test", "scene_id": "bdd-00067cfb-caba8a02", "camera": "CAM_FRONT", "binary_label": 1}
