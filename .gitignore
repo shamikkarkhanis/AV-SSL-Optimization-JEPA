@@ -14,7 +14,7 @@ build/
 .ipynb_checkpoints/
 
 # Virtual environments
-.venv/
+.venv*/
 venv/
 
 # Eval output

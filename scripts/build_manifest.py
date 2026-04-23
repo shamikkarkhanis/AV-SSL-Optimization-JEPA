@@ -9,7 +9,7 @@ import os
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("build_manifest")
@@ -17,16 +17,16 @@ logger = logging.getLogger("build_manifest")
 
 def parse_scene_and_ts(filename: str, camera: str) -> Tuple[Optional[str], Optional[int]]:
     """Extract scene_id and timestamp from filename.
-    
+
     Format expected: {scene_id}__{camera}__{timestamp}.jpg
     Example: n008-2018-08-01...__CAM_FRONT__1533151603512404.jpg
     """
     name = os.path.splitext(os.path.basename(filename))[0]
     marker = f"__{camera}__"
-    
+
     if marker not in name:
         return None, None
-        
+
     try:
         left, right = name.split(marker, 1)
         ts = int(right)
@@ -36,7 +36,7 @@ def parse_scene_and_ts(filename: str, camera: str) -> Tuple[Optional[str], Optio
 
 
 def _assign_scene_splits(
-    scene_ids: Iterable[str],
+    scene_ids,
     train_ratio: float,
     val_ratio: float,
     seed: int,
@@ -108,6 +108,69 @@ def _write_evaluation_labels_template(
     return len(rows)
 
 
+def _scan_scene_frames(cam_dir: Path, camera: str) -> Dict[str, List[Tuple[int, Path]]]:
+    scenes: Dict[str, List[Tuple[int, Path]]] = defaultdict(list)
+    valid_extensions = {".jpg", ".jpeg", ".png"}
+    count = 0
+    for entry in cam_dir.iterdir():
+        if entry.suffix.lower() not in valid_extensions:
+            continue
+        scene_id, ts = parse_scene_and_ts(entry.name, camera)
+        if scene_id:
+            scenes[scene_id].append((ts, entry))
+            count += 1
+    logger.info(f"Found {count} frames in {len(scenes)} scenes at {cam_dir}")
+    return scenes
+
+
+def _build_clips(
+    scenes: Dict[str, List[Tuple[int, Path]]],
+    root: Path,
+    dataset_root: Path,
+    camera: str,
+    window_size: int,
+    stride: int,
+    split_fn: Callable[[str], str],
+    relative_paths: bool,
+) -> List[Dict[str, object]]:
+    clips: List[Dict[str, object]] = []
+    for scene_id in sorted(scenes.keys()):
+        items = scenes[scene_id]
+        items.sort(key=lambda x: x[0])
+        n_frames = len(items)
+
+        for i in range(0, max(0, n_frames - window_size + 1), stride):
+            chunk = items[i : i + window_size]
+            if len(chunk) < window_size:
+                break
+
+            timestamps = [t for t, _ in chunk]
+            clip_id = f"{scene_id}__{camera}__{timestamps[0]}__{timestamps[-1]}"
+
+            if relative_paths:
+                frame_paths = []
+                for _, p in chunk:
+                    try:
+                        frame_paths.append(str(p.relative_to(root)))
+                    except ValueError:
+                        frame_paths.append(str(p.absolute()))
+            else:
+                frame_paths = [str(p.absolute()) for _, p in chunk]
+
+            clips.append(
+                {
+                    "clip_id": clip_id,
+                    "split": split_fn(scene_id),
+                    "scene_id": scene_id,
+                    "camera": camera,
+                    "frame_paths": frame_paths,
+                    "timestamps": timestamps,
+                    "metadata": {"source_dataset": dataset_root.name},
+                }
+            )
+    return clips
+
+
 def build_manifest(
     dataroot: str,
     output_path: str,
@@ -120,84 +183,54 @@ def build_manifest(
     relative_paths: bool = True,
     evaluation_labels_output: Optional[str] = None,
     evaluation_label_splits: Tuple[str, ...] = ("val", "test"),
+    test_frames_roots: Optional[Sequence[str]] = None,
 ) -> int:
     """Scan directory and build clip manifest."""
     root = Path(dataroot)
     cam_dir, dataset_root = _resolve_camera_dir(root, camera)
-        
-    logger.info(f"Scanning {cam_dir}...")
-    
-    # Group by scene
-    scenes: Dict[str, List[Tuple[int, Path]]] = defaultdict(list)
-    valid_extensions = {".jpg", ".jpeg", ".png"}
-    
-    count = 0
-    for entry in cam_dir.iterdir():
-        if entry.suffix.lower() not in valid_extensions:
-            continue
-            
-        scene_id, ts = parse_scene_and_ts(entry.name, camera)
-        if scene_id:
-            scenes[scene_id].append((ts, entry))
-            count += 1
-            
-    logger.info(f"Found {count} frames in {len(scenes)} scenes")
+
+    logger.info(f"Scanning primary root {cam_dir}...")
+    scenes = _scan_scene_frames(cam_dir, camera)
+
     split_map = _assign_scene_splits(
         scenes.keys(),
         train_ratio=train_ratio,
         val_ratio=val_ratio,
         seed=seed,
     )
-    
-    # Build clips
-    clips = []
-    
-    for scene_id in sorted(scenes.keys()):
-        items = scenes[scene_id]
-        # Sort by timestamp
-        items.sort(key=lambda x: x[0])
-        
-        n_frames = len(items)
-        
-        # Sliding window
-        for i in range(0, max(0, n_frames - window_size + 1), stride):
-            chunk = items[i : i + window_size]
-            
-            if len(chunk) < window_size:
-                break
-                
-            timestamps = [t for t, _ in chunk]
-            clip_id = f"{scene_id}__{camera}__{timestamps[0]}__{timestamps[-1]}"
-            
-            # Paths
-            if relative_paths:
-                frame_paths = []
-                for _, p in chunk:
-                    try:
-                        rel_path = p.relative_to(root)
-                        frame_paths.append(str(rel_path))
-                    except ValueError:
-                        frame_paths.append(str(p.absolute()))
-            else:
-                frame_paths = [str(p.absolute()) for _, p in chunk]
-            
-            record = {
-                "clip_id": clip_id,
-                "split": split_map[scene_id],
-                "scene_id": scene_id,
-                "camera": camera,
-                "frame_paths": frame_paths,
-                "timestamps": timestamps,
-                "metadata": {
-                    "source_dataset": dataset_root.name,
-                },
-            }
-            clips.append(record)
-            
-    # Write output
+
+    clips = _build_clips(
+        scenes=scenes,
+        root=root,
+        dataset_root=dataset_root,
+        camera=camera,
+        window_size=window_size,
+        stride=stride,
+        split_fn=lambda sid: split_map[sid],
+        relative_paths=relative_paths,
+    )
+
+    for test_root_str in test_frames_roots or ():
+        test_root = Path(test_root_str)
+        test_cam_dir, test_dataset_root = _resolve_camera_dir(test_root, camera)
+        logger.info(f"Scanning test root {test_cam_dir}...")
+        test_scenes = _scan_scene_frames(test_cam_dir, camera)
+        test_clips = _build_clips(
+            scenes=test_scenes,
+            root=test_root,
+            dataset_root=test_dataset_root,
+            camera=camera,
+            window_size=window_size,
+            stride=stride,
+            split_fn=lambda sid: "test",
+            relative_paths=False,
+        )
+        logger.info(f"Test root {test_root_str}: added {len(test_clips)} clips")
+        clips.extend(test_clips)
+
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(out_path, "w") as f:
         for clip in clips:
             f.write(json.dumps(clip) + "\n")
@@ -230,9 +263,19 @@ def main():
         default=None,
         help="Optional output JSONL path for binary evaluation labels template. Defaults next to the manifest.",
     )
-    
+    parser.add_argument(
+        "--test-frames-root",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "Additional frames root whose clips are forced into the 'test' split. "
+            "Repeatable; absolute paths are stored so the manifest is self-contained."
+        ),
+    )
+
     args = parser.parse_args()
-    
+
     count = build_manifest(
         args.dataroot,
         args.output,
@@ -244,6 +287,7 @@ def main():
         args.seed,
         relative_paths=not args.absolute,
         evaluation_labels_output=args.evaluation_labels_output,
+        test_frames_roots=args.test_frames_root,
     )
     print(f"Wrote {count} clips to {args.output}")
 
