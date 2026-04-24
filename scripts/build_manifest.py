@@ -9,7 +9,7 @@ import os
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("build_manifest")
@@ -97,7 +97,7 @@ def _write_evaluation_labels_template(
                 "split": split,
                 "scene_id": str(clip["scene_id"]),
                 "camera": str(clip["camera"]),
-                "binary_label": None,
+                "binary_label": clip.get("evaluation_label"),
             }
         )
 
@@ -171,6 +171,53 @@ def _build_clips(
     return clips
 
 
+def _build_test_clips(
+    roots: Sequence[str],
+    camera: str,
+    window_size: int,
+    stride: int,
+    evaluation_label: int,
+) -> List[Dict[str, object]]:
+    clips: List[Dict[str, object]] = []
+    for root_str in roots:
+        test_root = Path(root_str)
+        test_cam_dir, test_dataset_root = _resolve_camera_dir(test_root, camera)
+        logger.info(f"Scanning labeled test root {test_cam_dir}...")
+        test_scenes = _scan_scene_frames(test_cam_dir, camera)
+        root_clips = _build_clips(
+            scenes=test_scenes,
+            root=test_root,
+            dataset_root=test_dataset_root,
+            camera=camera,
+            window_size=window_size,
+            stride=stride,
+            split_fn=lambda sid: "test",
+            relative_paths=False,
+        )
+        for clip in root_clips:
+            clip["evaluation_label"] = evaluation_label
+        logger.info(
+            "Labeled test root %s: added %d clips with binary_label=%d",
+            root_str,
+            len(root_clips),
+            evaluation_label,
+        )
+        clips.extend(root_clips)
+    return clips
+
+
+def _sample_clips(
+    clips: Sequence[Dict[str, object]],
+    sample_size: int,
+    rng: random.Random,
+) -> List[Dict[str, object]]:
+    if sample_size >= len(clips):
+        return list(clips)
+    sampled = rng.sample(list(clips), sample_size)
+    sampled.sort(key=lambda clip: str(clip["clip_id"]))
+    return sampled
+
+
 def build_manifest(
     dataroot: str,
     output_path: str,
@@ -183,7 +230,8 @@ def build_manifest(
     relative_paths: bool = True,
     evaluation_labels_output: Optional[str] = None,
     evaluation_label_splits: Tuple[str, ...] = ("val", "test"),
-    test_frames_roots: Optional[Sequence[str]] = None,
+    positive_test_roots: Optional[Sequence[str]] = None,
+    negative_test_roots: Optional[Sequence[str]] = None,
 ) -> int:
     """Scan directory and build clip manifest."""
     root = Path(dataroot)
@@ -210,23 +258,34 @@ def build_manifest(
         relative_paths=relative_paths,
     )
 
-    for test_root_str in test_frames_roots or ():
-        test_root = Path(test_root_str)
-        test_cam_dir, test_dataset_root = _resolve_camera_dir(test_root, camera)
-        logger.info(f"Scanning test root {test_cam_dir}...")
-        test_scenes = _scan_scene_frames(test_cam_dir, camera)
-        test_clips = _build_clips(
-            scenes=test_scenes,
-            root=test_root,
-            dataset_root=test_dataset_root,
-            camera=camera,
-            window_size=window_size,
-            stride=stride,
-            split_fn=lambda sid: "test",
-            relative_paths=False,
+    positive_test_clips = _build_test_clips(
+        positive_test_roots or (),
+        camera=camera,
+        window_size=window_size,
+        stride=stride,
+        evaluation_label=1,
+    )
+    negative_test_clips = _build_test_clips(
+        negative_test_roots or (),
+        camera=camera,
+        window_size=window_size,
+        stride=stride,
+        evaluation_label=0,
+    )
+
+    if positive_test_clips and negative_test_clips:
+        sample_size = min(len(positive_test_clips), len(negative_test_clips))
+        rng = random.Random(seed)
+        positive_test_clips = _sample_clips(positive_test_clips, sample_size, rng)
+        negative_test_clips = _sample_clips(negative_test_clips, sample_size, rng)
+        logger.info(
+            "Balanced labeled test pool to %d positive and %d negative clips",
+            len(positive_test_clips),
+            len(negative_test_clips),
         )
-        logger.info(f"Test root {test_root_str}: added {len(test_clips)} clips")
-        clips.extend(test_clips)
+
+    clips.extend(positive_test_clips)
+    clips.extend(negative_test_clips)
 
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -264,12 +323,22 @@ def main():
         help="Optional output JSONL path for binary evaluation labels template. Defaults next to the manifest.",
     )
     parser.add_argument(
-        "--test-frames-root",
+        "--positive-test",
         action="append",
         default=[],
         metavar="PATH",
         help=(
-            "Additional frames root whose clips are forced into the 'test' split. "
+            "Frames root whose clips are forced into the 'test' split and labeled 1. "
+            "Repeatable; absolute paths are stored so the manifest is self-contained."
+        ),
+    )
+    parser.add_argument(
+        "--negative-test",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "Frames root whose clips are forced into the 'test' split and labeled 0. "
             "Repeatable; absolute paths are stored so the manifest is self-contained."
         ),
     )
@@ -287,7 +356,8 @@ def main():
         args.seed,
         relative_paths=not args.absolute,
         evaluation_labels_output=args.evaluation_labels_output,
-        test_frames_roots=args.test_frames_root,
+        positive_test_roots=args.positive_test,
+        negative_test_roots=args.negative_test,
     )
     print(f"Wrote {count} clips to {args.output}")
 
