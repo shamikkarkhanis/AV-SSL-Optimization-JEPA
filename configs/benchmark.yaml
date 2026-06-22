@@ -1,0 +1,118 @@
+# Shared base config for the FTC 2026 experiment cycle.
+#
+# This config holds everything that is CONSTANT across the source x frames x seed
+# matrix: the winning factorial hyperparameters, longer training, and a FIXED
+# labeled evaluation benchmark. scripts/run_main_experiments.py overrides only the
+# training manifest / frames_per_clip / seed per condition.
+#
+# Key idea: scoring + evaluation always run on the same held-out benchmark
+# (scoring_frames_per_clip / evaluation_frames_per_clip pinned to 16), so 16- vs
+# 32-frame TRAINING runs are compared on identical evaluation clips. See
+# pipeline._stage_frames_per_clip.
+#
+# NOTE: the absolute paths below follow the cluster's barn-shared layout. Adjust
+# the data_root / manifest paths to match your account before launching, or pass
+# --manifest-dir / --data-root to the driver.
+
+seed: 42
+
+dataset:
+  # Training source (overridden per condition by the driver). nuScenes "samples"
+  # (2 Hz keyframes) by default; "sweeps" (12 Hz) is the other source.
+  data_root: "/gpfs/u/home/EFCM/EFCMnrkh/barn-shared/data/raw/v1.0-trainval"
+  frames_per_clip: 16
+  tubelet_size: 2
+  image_size: 224
+  patch_size: 16
+  mask_ratio: 0.5            # winning factorial setting
+
+  # Training / validation vary by condition (driver overrides these).
+  training_manifest: "/gpfs/u/home/EFCM/EFCMnrkh/barn-shared/data/manifests/nuscenes_samples_16.jsonl"
+  training_split: "train"
+  validation_manifest: "/gpfs/u/home/EFCM/EFCMnrkh/barn-shared/data/manifests/nuscenes_samples_16.jsonl"
+  validation_split: "val"
+
+  # FIXED held-out benchmark, shared by every run. Built once on the cluster as a
+  # merged manifest of labeled nuScenes + Waymo + BDD100K test clips (16 frames).
+  scoring_manifest: "/gpfs/u/home/EFCM/EFCMnrkh/barn-shared/data/manifests/benchmark_test.jsonl"
+  scoring_split: "test"
+  scoring_frames_per_clip: 16
+  evaluation_manifest: "/gpfs/u/home/EFCM/EFCMnrkh/barn-shared/data/manifests/benchmark_test.jsonl"
+  evaluation_split: "test"
+  evaluation_frames_per_clip: 16
+  evaluation_labels: "/gpfs/u/home/EFCM/EFCMnrkh/barn-shared/data/manifests/benchmark_test_evaluation_labels.jsonl"
+
+model:
+  encoder_name: "facebook/vjepa2-vitl-fpc64-256"
+  embedding_dim: 1024
+  init_mode: "pretrained"
+  encoder_mode: "frozen"
+  pretrained_name_or_path: "facebook/vjepa2-vitl-fpc64-256"
+  resume_checkpoint: null
+  predictor:
+    hidden_dim: 512          # winning factorial setting
+    dropout: 0.1
+    activation: "gelu"
+
+train:
+  epochs: 25                 # longer training; driver can override with --epochs
+  optimizer: "adamw"
+  lr: 1.0e-4                 # winning factorial setting
+  weight_decay: 0.01
+  loss: "l1"
+  normalize_embeddings: true
+  checkpoint_every: 1        # keep every epoch so AP-vs-epoch curves are possible
+  target_metric: null
+
+score:
+  aggregation: "mean"
+  power_watts: 75.0
+  warmup_batches: 1
+  amp: "auto"
+
+evaluation:
+  k_values: [10, 50, 100]
+  primary_label_field: "binary_label"
+  positive_labels: ["high_value"]
+  include_medium_as_positive: true
+  graded_labels:
+    low_value: 0.0
+    medium_value: 1.0
+    high_value: 2.0
+  health_metrics:
+    - "mean_cosine_similarity"
+    - "validation_loss"
+
+runtime:
+  profile: "gpu"
+  device: "auto"
+  amp: "auto"
+  num_workers: 8
+  persistent_workers: true
+  prefetch_factor: 4
+  cpu_threads: 8
+  batch_size_overrides:
+    train: 8
+    score: 1
+    evaluation: 8
+  grad_accum_steps: 1
+  profiles:
+    cpu:
+      device: "cpu"
+      amp: "none"
+      num_workers: 0
+      batch_size_overrides:
+        train: 1
+        score: 1
+        evaluation: 1
+    gpu:
+      device: "auto"
+      amp: "auto"
+    ddp:
+      device: "cuda"
+      amp: "auto"
+
+experiment:
+  name: "benchmark"
+  description: "FTC 2026 experiment cycle: source x frames x seeds on a fixed benchmark."
+  output_root: "experiments/runs"

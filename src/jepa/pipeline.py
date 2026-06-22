@@ -100,6 +100,27 @@ def _build_loader(
     return DataLoader(**loader_kwargs)
 
 
+def _stage_frames_per_clip(dataset_cfg: Dict[str, Any], stage: str) -> int:
+    """Frames per clip for a stage, allowing the eval benchmark to stay fixed.
+
+    Training and validation use the experiment's ``frames_per_clip`` (the factor we
+    study, e.g. 16 vs 32). Scoring and evaluation fall back to that same value but
+    may override it via ``scoring_frames_per_clip`` / ``evaluation_frames_per_clip``
+    so every run scores an identical held-out benchmark regardless of training
+    clip length. This is safe because the predictor operates per ``tubelet_size``
+    chunk, so clip length only changes the number of tubelets, not their shape.
+    """
+    default = int(dataset_cfg.get("frames_per_clip", 16))
+    override_key = {
+        "train": "frames_per_clip",
+        "validation": "frames_per_clip",
+        "score": "scoring_frames_per_clip",
+        "evaluation": "evaluation_frames_per_clip",
+    }[stage]
+    value = dataset_cfg.get(override_key)
+    return int(value) if value is not None else default
+
+
 def _build_stage_dataset(config: Dict[str, Any], stage: str) -> TubeletDataset:
     dataset_cfg = config["dataset"]
     manifest_key = {
@@ -120,7 +141,7 @@ def _build_stage_dataset(config: Dict[str, Any], stage: str) -> TubeletDataset:
         tubelet_size=int(dataset_cfg["tubelet_size"]),
         transform=_dataset_transform(config),
         split=dataset_cfg.get(split_key),
-        frames_per_clip=int(dataset_cfg.get("frames_per_clip", 16)),
+        frames_per_clip=_stage_frames_per_clip(dataset_cfg, stage),
     )
 
 
@@ -168,6 +189,23 @@ def _effective_batch_size(config: Dict[str, Any], stage: str) -> int:
 
 def _checkpoint_artifact_path(run_dir: Path) -> Path:
     return run_dir / "training" / "checkpoints" / "best_model.pt"
+
+
+def _load_model_weights(model: JEPAModel, checkpoint: Dict[str, Any]) -> None:
+    """Load weights from a checkpoint that may be predictor-only or full-model.
+
+    Frozen-encoder runs save only the predictor (the encoder is rebuilt from the
+    HF cache in ``_build_model``); finetune runs save the whole model. Old
+    checkpoints that stored ``model_state_dict`` still load unchanged.
+    """
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
+    elif "predictor_state_dict" in checkpoint:
+        model.predictor.load_state_dict(checkpoint["predictor_state_dict"])
+    else:
+        raise KeyError(
+            "Checkpoint has neither 'model_state_dict' nor 'predictor_state_dict'."
+        )
 
 
 def _scores_artifact_path(run_dir: Path) -> Path:
@@ -222,7 +260,7 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
                 "model.resume_checkpoint is required for init_mode=resume."
             )
         checkpoint = torch.load(resume_checkpoint, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
+        _load_model_weights(model, checkpoint)
         if checkpoint.get("optimizer_state_dict"):
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = int(checkpoint.get("epoch", 0)) + 1
@@ -294,7 +332,9 @@ def train_stage(config: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
 
 
 def score_stage(
-    config: Dict[str, Any], run_dir: Path
+    config: Dict[str, Any],
+    run_dir: Path,
+    checkpoint_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     config = resolve_config(config)
     _ensure_run_layout(run_dir, config)
@@ -304,10 +344,10 @@ def score_stage(
     if runtime_cfg.get("cpu_threads"):
         torch.set_num_threads(int(runtime_cfg["cpu_threads"]))
 
-    checkpoint_path = _checkpoint_artifact_path(run_dir)
+    checkpoint_path = Path(checkpoint_path) if checkpoint_path else _checkpoint_artifact_path(run_dir)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model = _build_model(config)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    _load_model_weights(model, checkpoint)
     model.to(device)
     model.eval()
 

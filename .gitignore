@@ -1,9 +1,20 @@
 data/raw/
+data/meta/
 .DS_Store
 __pycache__
 *.pyc
 renders
 v1.0-mini
+
+# Paper lives in a separate Overleaf git repo cloned into ./paper
+paper/
+
+# IDE
+.idea/
+.vscode/
+
+# Experiment run outputs
+experiments/
 
 # Production build artifacts
 .pytest_cache/

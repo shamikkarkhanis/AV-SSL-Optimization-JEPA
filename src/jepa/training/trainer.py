@@ -156,13 +156,21 @@ class Trainer:
             is_best: Whether this is the best model so far
             config: Configuration dictionary to save
         """
+        # The encoder is frozen and reloaded from the HF cache at score time, so we
+        # only persist the trainable predictor (a few MB) instead of the full model
+        # (~1.2 GB with the ViT-L encoder). Saving the encoder every epoch would
+        # otherwise blow up disk (e.g. 25 epochs x 20 runs ~ 600 GB). For finetune
+        # runs the encoder weights change, so we save the full model in that case.
         checkpoint = {
             "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
+            "predictor_state_dict": self.model.predictor.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "val_loss": val_loss,
             "config": config,
+            "encoder_mode": self.encoder_mode,
         }
+        if self.encoder_mode == "finetune":
+            checkpoint["model_state_dict"] = self.model.state_dict()
         
         # Save epoch checkpoint
         filename = self.checkpoint_dir / f"checkpoint_epoch_{epoch:03d}.pt"
